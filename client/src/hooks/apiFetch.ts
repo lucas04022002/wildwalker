@@ -1,4 +1,13 @@
-const BASE_URL = import.meta.env.VITE_API_URL;
+/**
+ * Préfixe des appels d'API.
+ *
+ * En développement le client (port 3000) et le serveur (port 3310) sont deux
+ * origines : `VITE_API_URL` porte celle du serveur. En production l'image
+ * Docker sert le client et l'API depuis le même processus : la variable est
+ * construite à vide, et le préfixe vide donne des URL relatives, donc la
+ * même origine — aucun CORS, et le cookie de session part de lui-même.
+ */
+const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 /**
  * Appel à l'API.

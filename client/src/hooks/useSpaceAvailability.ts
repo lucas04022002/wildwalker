@@ -43,7 +43,7 @@ function useSpaceAvailability(
 
     // Appel à l'API de disponibilité pour l'espace donné
     fetch(
-      `${import.meta.env.VITE_API_URL}/api/spaces/${spaceId}/availability?${params.toString()}`,
+      `${import.meta.env.VITE_API_URL ?? ""}/api/spaces/${spaceId}/availability?${params.toString()}`,
       { signal: controller.signal },
     )
       .then((res) => {

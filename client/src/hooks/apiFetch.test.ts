@@ -119,3 +119,47 @@ describe("logout", () => {
     expect(location.href).toBe("/log-in");
   });
 });
+
+/**
+ * En production, l'image Docker sert le client et l'API depuis le même
+ * processus : le build est fait avec `VITE_API_URL=""`. Le préfixe vide doit
+ * donner une URL relative — surtout pas la chaîne « undefined ».
+ */
+describe("apiFetch sans VITE_API_URL (production, même origine)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("appelle une URL relative quand la variable est vide", async () => {
+    vi.stubEnv("VITE_API_URL", "");
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => okResponse()),
+    );
+
+    const { apiFetch: freshFetch } = await import("./apiFetch");
+    await freshFetch("/api/cart");
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/cart");
+  });
+
+  it("n'écrit jamais « undefined » dans l'URL si la variable n'existe pas", async () => {
+    vi.stubEnv("VITE_API_URL", undefined as unknown as string);
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => okResponse()),
+    );
+
+    const { apiFetch: freshFetch } = await import("./apiFetch");
+    await freshFetch("/api/cart");
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).not.toContain("undefined");
+    expect(url).toBe("/api/cart");
+  });
+});

@@ -47,11 +47,35 @@ const signToken = (payload: TokenPayload): string => {
 const verifyToken = (token: string): TokenPayload =>
   jwt.verify(token, getSecret(), { algorithms: ["HS256"] }) as TokenPayload;
 
-/** Options du cookie de session : `Secure` seulement en production. */
+/**
+ * Le cookie doit-il porter l'attribut `Secure` ?
+ *
+ * Par défaut : oui en production, non ailleurs. `COOKIE_SECURE` permet de
+ * forcer la réponse dans les deux sens, pour un seul cas légitime : le smoke
+ * test de la CI, qui lance l'image avec `NODE_ENV=production` mais parle en
+ * HTTP simple — sans ce levier, le navigateur (et supertest) n'enverrait
+ * jamais le cookie et le test ne prouverait rien. À NE JAMAIS poser en
+ * production réelle : un cookie de session sans `Secure` voyage en clair.
+ */
+const isCookieSecure = (env: NodeJS.ProcessEnv = process.env): boolean => {
+  const override = (env.COOKIE_SECURE ?? "").trim().toLowerCase();
+
+  if (override === "0" || override === "false") {
+    return false;
+  }
+
+  if (override === "1" || override === "true") {
+    return true;
+  }
+
+  return env.NODE_ENV === "production";
+};
+
+/** Options du cookie de session. */
 const cookieOptions = () => ({
   httpOnly: true,
   sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
+  secure: isCookieSecure(),
   maxAge: SESSION_DURATION_MS,
   path: "/",
 });
@@ -59,6 +83,7 @@ const cookieOptions = () => ({
 export default { signToken, verifyToken, cookieOptions };
 export {
   COOKIE_NAME,
+  isCookieSecure,
   SESSION_DURATION_MS,
   SESSION_DURATION_SECONDS,
   cookieOptions,

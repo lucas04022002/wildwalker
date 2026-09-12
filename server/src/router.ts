@@ -14,10 +14,19 @@ import createEventFormAction from "./modules/createEventForm/createEventFormActi
 import dasboardAdminActions from "./modules/dashboardAdmin/dashboardAdminActions";
 import dashboardClientActions from "./modules/dashboardClient/dashboardClientActions";
 import eventActions from "./modules/event/eventActions";
+import healthActions from "./modules/health/healthActions";
 import spaceActions from "./modules/space/spaceActions";
 import timeSlotActions from "./modules/timeSlot/timeSlotActions";
 
 const router = express.Router();
+
+/* ************************************************************************* */
+// Santé (publique)
+/* ************************************************************************* */
+
+// Première route du routeur : elle doit répondre même si tout le reste est
+// en peine. Utilisée par le HEALTHCHECK du conteneur et par la CI.
+router.get("/api/health", healthActions.check);
 
 /* ************************************************************************* */
 // Auth routes (publiques)

@@ -116,7 +116,7 @@ function Cart() {
               src={
                 item.url_image.startsWith("http")
                   ? item.url_image
-                  : `${import.meta.env.VITE_API_URL}${item.url_image}`
+                  : `${import.meta.env.VITE_API_URL ?? ""}${item.url_image}`
               }
               alt={item.space_name}
               className="cart-item-image"

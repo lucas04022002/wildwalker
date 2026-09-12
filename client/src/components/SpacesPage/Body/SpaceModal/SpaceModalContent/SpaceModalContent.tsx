@@ -58,7 +58,7 @@ function SpaceModalContent({
 
         <motion.img
           className="space-modal-image"
-          src={`${import.meta.env.VITE_API_URL}${currentSpace.url_image}`}
+          src={`${import.meta.env.VITE_API_URL ?? ""}${currentSpace.url_image}`}
           alt={currentSpace.space_name}
           animate={{
             scale: showBookingForm ? 1.05 : 1,

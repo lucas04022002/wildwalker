@@ -18,7 +18,7 @@ function CardSpace({ fakeArraySpace }: CardSpaceProps) {
       <div className="card-space-img-container">
         <img
           className="card-space-img"
-          src={`${import.meta.env.VITE_API_URL}${fakeArraySpace.url_image}`}
+          src={`${import.meta.env.VITE_API_URL ?? ""}${fakeArraySpace.url_image}`}
           alt={fakeArraySpace.space_name}
         />
       </div>

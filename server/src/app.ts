@@ -62,18 +62,34 @@ app.use("/api", (_req, res) => {
 // Fichiers statiques (serveur puis client construit)
 /* ************************************************************************* */
 
-const publicFolderPath = path.join(__dirname, "../../server/public");
+/**
+ * Racine du workspace `server`, quelle que soit la façon dont on tourne.
+ *
+ * En développement (tsx) `__dirname` vaut `server/src` ; une fois compilé il
+ * vaut `server/dist/src`. Un chemin relatif unique ne peut donc pas convenir
+ * aux deux : on remonte d'un cran de plus quand le dossier parent est `dist`.
+ * Sans ça, l'image Docker servait `server/server/public` — c'est-à-dire rien.
+ */
+const serverRoot =
+  path.basename(path.join(__dirname, "..")) === "dist"
+    ? path.join(__dirname, "..", "..")
+    : path.join(__dirname, "..");
+
+const publicFolderPath = path.join(serverRoot, "public");
 
 if (fs.existsSync(publicFolderPath)) {
   app.use(express.static(publicFolderPath));
 }
 
-const clientBuildPath = path.join(__dirname, "../../client/dist");
+// En production le client construit est servi par le même processus : une
+// seule image, une seule origine, donc pas de CORS ni de cookie tiers.
+// Ce bloc est placé APRÈS le 404 JSON de `/api` : une route d'API inconnue
+// répond en JSON et ne reçoit jamais l'`index.html` du client.
+const clientBuildPath = path.join(serverRoot, "..", "client", "dist");
 
 if (fs.existsSync(clientBuildPath)) {
   app.use(express.static(clientBuildPath));
 
-  // Redirect unhandled requests to the client index file
   app.get("*", (_, res) => {
     res.sendFile("index.html", { root: clientBuildPath });
   });
@@ -108,3 +124,4 @@ const handleErrors: ErrorRequestHandler = (_err, _req, res, _next) => {
 app.use(handleErrors);
 
 export default app;
+export { clientBuildPath, publicFolderPath, serverRoot };
