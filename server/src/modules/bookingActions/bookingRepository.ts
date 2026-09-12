@@ -1,6 +1,7 @@
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
 import { type CartPriceRow, lineAmountInEuros } from "../Payment/amount";
+import billingRepository from "../shared/billingRepository";
 
 type CartLine = CartPriceRow & {
   id: number;
@@ -40,21 +41,6 @@ const readCartForUpdate = async (
   return rows as CartLine[];
 };
 
-/** Numéro de facture : `<année>-<n>`, compté dans la transaction courante. */
-const nextBillsNumber = async (
-  connection: PoolConnection,
-  year: number,
-): Promise<string> => {
-  const [rows] = await connection.query<RowDataPacket[]>(
-    "SELECT COUNT(*) as count FROM booking WHERE bills_number LIKE ?",
-    [`${year}-%`],
-  );
-
-  const count = Number((rows as { count: number }[])[0].count);
-
-  return `${year}-${count + 1}`;
-};
-
 /**
  * Crée les réservations du panier de `userId` et vide le panier.
  * Retourne le nombre de réservations créées.
@@ -80,7 +66,10 @@ const createFromCart = async (userId: number): Promise<number> => {
       // les locaux loués au mois. Un écart ici facturerait autre chose que ce
       // que Stripe a encaissé.
       const totalPrice = lineAmountInEuros(line);
-      const billsNumber = await nextBillsNumber(connection, year);
+      const billsNumber = await billingRepository.nextBillsNumber(
+        connection,
+        year,
+      );
 
       await connection.query(
         `INSERT INTO booking (users_id, bills_number, quantity, total_price, id_activity)

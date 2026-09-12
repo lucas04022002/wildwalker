@@ -1,5 +1,6 @@
 import databaseClient from "../../../database/client";
 import type { Rows } from "../../../database/client";
+import billingRepository from "../shared/billingRepository";
 
 type Booking = {
   id: number;
@@ -233,12 +234,10 @@ class DashboardAdminRepository {
     );
     const priceUnit = (priceRows[0] as { price_unit: number }).price_unit;
 
-    const [rows] = await databaseClient.query<Rows>(
-      "SELECT COUNT(*) as count FROM booking WHERE bills_number LIKE ?",
-      [`${year}-%`],
+    const billsNumber = await billingRepository.nextBillsNumber(
+      databaseClient,
+      year,
     );
-    const count = (rows as { count: number }[])[0].count;
-    const billsNumber = `${year}-${Number(count) + 1}`;
 
     await databaseClient.query(
       `INSERT INTO booking (users_id, bills_number, quantity, total_price, id_activity, payment_status)
