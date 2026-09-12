@@ -15,6 +15,12 @@ on:
   pull_request:
     branches: [refonte, main]
 
+# Le jeton fourni aux jobs est en lecture seule : cette CI ne pousse rien,
+# n'ouvre aucune issue et ne publie aucune image. Sans cette ligne, le jeton
+# hérite des droits par défaut du dépôt, bien plus larges que nécessaire.
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: "22"
 

@@ -20,7 +20,7 @@ jest.mock("../src/modules/cart/cartRepository", () => ({
   },
 }));
 
-import app from "../src/app";
+import app, { handleErrors } from "../src/app";
 import { clientUser, sessionCookie } from "./helpers/session";
 
 describe("gestionnaire d'erreurs final", () => {
@@ -60,5 +60,42 @@ describe("gestionnaire d'erreurs final", () => {
       .set("Cookie", sessionCookie(clientUser));
 
     expect(errorSpy).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Quand la réponse est déjà partie (flux interrompu, en-têtes émis), on ne
+ * peut plus rien écrire. Se contenter d'un `return` laissait la requête
+ * pendante jusqu'au timeout : il faut rendre la main à Express, qui ferme
+ * la connexion.
+ */
+describe("handleErrors — réponse déjà commencée", () => {
+  const faireRes = (headersSent: boolean) => ({
+    headersSent,
+    status: jest.fn().mockReturnThis(),
+    json: jest.fn().mockReturnThis(),
+  });
+
+  test("passe l'erreur à Express si les en-têtes sont partis", () => {
+    const res = faireRes(true);
+    const next = jest.fn();
+    const err = new Error("flux coupé");
+
+    handleErrors(err, {} as never, res as never, next);
+
+    expect(next).toHaveBeenCalledWith(err);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("répond 500 neutre tant que rien n'est envoyé", () => {
+    const res = faireRes(false);
+    const next = jest.fn();
+
+    handleErrors(new Error("boum"), {} as never, res as never, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ message: "Erreur serveur." });
   });
 });

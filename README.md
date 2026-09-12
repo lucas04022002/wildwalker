@@ -108,7 +108,7 @@ Pour faire évoluer le schéma, on **ajoute** un fichier
 | `npm run db:seed` | Charge les données de démonstration (refusé en production sans `ALLOW_SEED=1`) |
 | `npm run build` | Compile le client (`client/dist`) et le serveur (`server/dist`) |
 | `npm start` | Démarre le serveur compilé (`node dist/src/main.js`) |
-| `npm run check` | Biome + vérification des types |
+| `npm run check` | Vérification complète : Biome sur tout le dépôt (pas seulement l'index git) + types des deux workspaces |
 | `npm test` | Tests du client (Vitest) et du serveur (Jest) |
 
 Sans configuration, ou sans MySQL joignable, le serveur s'arrête avec un
@@ -137,15 +137,21 @@ npm test --workspace=client      # client seul
 ```
 
 - **Serveur (Jest + supertest)** : middlewares d'authentification et de rôle,
-  garde d'origine, calcul du montant Stripe côté serveur, propriété des
-  lignes de panier (IDOR → 404), limite de débit sur la connexion, sonde de
-  santé, attribut `Secure` du cookie. Dépôts et pool MySQL mockés.
+  garde d'origine, calcul du montant Stripe côté serveur, preuve de paiement
+  exigée avant réservation (402 sans intention `succeeded` au bon montant),
+  propriété des lignes de panier (IDOR → 404), validation de la quantité et
+  re-contrôle de capacité au `PATCH`, compteur de numéros de facture,
+  limite de débit sur la connexion, refus d'envoi de fichier (400 lisible),
+  sonde de santé, attribut `Secure` du cookie. Dépôts, Stripe et pool MySQL
+  mockés.
 - **Client (Vitest + Testing Library)** : `RequireRole`, `apiFetch`
   (credentials, URL relative en production), formulaires de connexion et
   d'inscription, panier, paiement.
 - **Intégration (CI seulement)** : `server/tests/*.int.test.ts` tourne contre
-  un MySQL 8 réel, migré et seedé. Ces suites s'ignorent d'elles-mêmes quand
-  `DB_HOST` n'est pas renseigné.
+  un MySQL 8 réel, migré et seedé — réservation de bout en bout, et
+  concurrence : deux paiements simultanés du même panier, deux réservations
+  simultanées du même créneau, numéros de facture concurrents. Ces suites
+  s'ignorent d'elles-mêmes quand `DB_HOST` n'est pas renseigné.
 - **Image Docker (CI seulement)** : l'image est construite puis **lancée**
   avec un MySQL, et interrogée — `/api/health` à 200 avec `db:true`, `/` qui
   sert bien le client, connexion d'un admin de démo suivie d'un appel à une
@@ -154,6 +160,36 @@ npm test --workspace=client      # client seul
 Le poste de développement n'ayant ni Docker ni MySQL, la CI
 (`.github/workflows/ci.yml`) est le seul endroit où l'image et les migrations
 sont réellement exécutées.
+
+## Limites connues
+
+Trois points relevés à la revue finale et laissés en l'état, sciemment. Ils
+sont documentés ici plutôt que corrigés à la hâte : chacun demande un choix
+d'architecture, pas un correctif.
+
+- **Limite de débit : ordre d'éviction.** `Middlewares/rateLimit.ts` garde
+  ses compteurs en mémoire et les purge à l'insertion, sans tenir de file
+  LRU. Sous un afflux d'adresses distinctes, l'entrée évincée n'est pas
+  forcément la plus ancienne, et un attaquant patient peut faire sortir la
+  sienne du cache. Acceptable pour un mono-conteneur ; la vraie réponse est
+  un magasin partagé (Redis) le jour où l'application tourne sur plusieurs
+  instances — ce qui règle du même coup le fait que les compteurs ne sont
+  aujourd'hui pas partagés entre processus.
+
+- **Ordre de verrouillage.** Les transactions de réservation posent leurs
+  verrous dans l'ordre où le code les rencontre (`cart`, puis `space`, puis
+  `activity` selon le chemin). Deux chemins qui les prendraient dans un
+  ordre différent pourraient se bloquer mutuellement ; MySQL détecte alors
+  l'interblocage et annule l'une des deux transactions — l'utilisateur voit
+  un 500, pas une corruption. Fixer un ordre unique et documenté pour tout
+  le code vaudrait mieux qu'y compter.
+
+- **`:userId` dans les URL du tableau de bord client.** Les routes
+  `/api/dashboard/client/:userId/...` portent encore un identifiant que le
+  serveur **ignore** : chaque action lit `req.user.id`, jamais le paramètre
+  (le panier, lui, a déjà perdu le sien). Il n'y a donc pas de faille, mais
+  une URL qui ment sur ce qu'elle fait — et invite le prochain
+  développeur à s'en servir. À retirer, côté client compris.
 
 ## Déploiement
 
@@ -172,12 +208,13 @@ wildwalker/
 │   ├── src/
 │   │   ├── Middlewares/    # auth, rôle, origine, limite de débit
 │   │   ├── modules/        # <domaine>/…Actions.ts + …Repository.ts
+│   │   ├── upload/         # multer : types acceptés, taille, nom généré
 │   │   ├── app.ts          # middlewares, statique, gestion d'erreurs
 │   │   ├── main.ts         # validation de l'environnement, démarrage
 │   │   └── router.ts
 │   ├── bin/                # migrate.ts, seed.ts, hash-demo-passwords.ts
 │   ├── database/           # migrations/, seed.sql, client.ts
-│   ├── public/             # images du serveur, uploads (volume)
+│   ├── public/             # fichiers statiques SEULEMENT : images, uploads
 │   └── tests/
 ├── deploy/coolify.md
 ├── docs/screenshots/

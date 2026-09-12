@@ -5,9 +5,11 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
+import multer from "multer";
 
 import { assertSameOrigin } from "./Middlewares/originMiddleware";
 import router from "./router";
+import { MAX_UPLOAD_BYTES, UnsupportedFileTypeError } from "./upload/upload";
 
 const app = express();
 
@@ -96,6 +98,51 @@ if (fs.existsSync(clientBuildPath)) {
 }
 
 /* ************************************************************************* */
+// Envois de fichiers refusés (avant la journalisation)
+/* ************************************************************************* */
+
+/**
+ * Un fichier trop gros ou d'un type refusé est une erreur de l'appelant,
+ * pas une panne du serveur. Sans ce gestionnaire, multer laissait filer son
+ * erreur jusqu'au filet final : 500 « Erreur serveur. », et l'utilisateur
+ * qui envoie un PDF de 40 Mo n'apprenait ni quoi ni pourquoi.
+ *
+ * Placé AVANT `logErrors` : un refus attendu n'a pas à encombrer les
+ * journaux d'erreurs.
+ */
+const MULTER_MESSAGES: Record<string, string> = {
+  LIMIT_FILE_SIZE: `Fichier trop volumineux : ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))} Mo maximum.`,
+  LIMIT_FILE_COUNT: "Trop de fichiers envoyés.",
+  LIMIT_UNEXPECTED_FILE: "Champ de fichier inattendu.",
+  LIMIT_PART_COUNT: "Formulaire trop volumineux.",
+  LIMIT_FIELD_KEY: "Nom de champ trop long.",
+  LIMIT_FIELD_VALUE: "Valeur de champ trop longue.",
+  LIMIT_FIELD_COUNT: "Trop de champs dans le formulaire.",
+};
+
+const handleUploadErrors: ErrorRequestHandler = (err, _req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  if (err instanceof multer.MulterError) {
+    res.status(400).json({
+      message: MULTER_MESSAGES[err.code] ?? "Le fichier envoyé a été refusé.",
+    });
+    return;
+  }
+
+  if (err instanceof UnsupportedFileTypeError) {
+    res.status(400).json({ message: err.message });
+    return;
+  }
+
+  next(err);
+};
+
+app.use(handleUploadErrors);
+
+/* ************************************************************************* */
 // Journalisation des erreurs (toujours en dernier)
 /* ************************************************************************* */
 
@@ -113,9 +160,12 @@ app.use(logErrors);
  * production : chemins de fichiers, requêtes SQL et noms de colonnes offerts
  * à qui provoque une erreur. Le détail reste dans les journaux du serveur.
  */
-const handleErrors: ErrorRequestHandler = (_err, _req, res, _next) => {
+const handleErrors: ErrorRequestHandler = (err, _req, res, next) => {
+  // Réponse déjà partie (flux interrompu, en-têtes émis) : on ne peut plus
+  // rien écrire. On rend la main à Express, qui fermera la connexion — se
+  // contenter d'un `return` laissait la requête pendante jusqu'au timeout.
   if (res.headersSent) {
-    return;
+    return next(err);
   }
 
   res.status(500).json({ message: "Erreur serveur." });
@@ -124,4 +174,4 @@ const handleErrors: ErrorRequestHandler = (_err, _req, res, _next) => {
 app.use(handleErrors);
 
 export default app;
-export { clientBuildPath, publicFolderPath, serverRoot };
+export { clientBuildPath, handleErrors, publicFolderPath, serverRoot };

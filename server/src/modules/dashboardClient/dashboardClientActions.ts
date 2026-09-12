@@ -130,6 +130,16 @@ const readInvoice: RequestHandler = async (req, res, next) => {
       bookingId,
       userId,
     );
+
+    // Facture inexistante, ou celle de quelqu'un d'autre (la requête filtre
+    // sur `users_id`) : même réponse dans les deux cas. Sans ce test la
+    // route répondait 200 avec un corps vide, et le client affichait une
+    // facture blanche au lieu d'une erreur.
+    if (invoice == null) {
+      res.status(404).json({ message: "Facture introuvable." });
+      return;
+    }
+
     res.json(invoice);
   } catch (err) {
     next(err);

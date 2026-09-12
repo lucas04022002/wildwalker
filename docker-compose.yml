@@ -19,6 +19,12 @@ services:
         VITE_STRIPE_PUBLIC_KEY: "${VITE_STRIPE_PUBLIC_KEY:-}"
     environment:
       NODE_ENV: production
+      # La pile locale parle en HTTP simple sur localhost : avec `Secure`,
+      # le navigateur garderait le cookie de session pour lui et personne ne
+      # pourrait se connecter. Uniquement ici — en production le cookie doit
+      # rester Secure, et le serveur avertit au démarrage si ce n'est pas
+      # le cas (server/src/main.ts).
+      COOKIE_SECURE: 0
       APP_PORT: 3310
       # Origine autorisée en CORS et par la garde anti-CSRF : ici la nôtre.
       CLIENT_URL: "${CLIENT_URL:-http://localhost:3310}"

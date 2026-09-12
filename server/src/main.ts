@@ -59,6 +59,18 @@ const start = async (): Promise<void> => {
     );
   }
 
+  // Un cookie de session sans `Secure` en production voyage en clair au
+  // premier appel HTTP : il suffit d'un réseau partagé pour le récupérer.
+  // `COOKIE_SECURE=0` est légitime en smoke test, jamais en production —
+  // le démarrage le dit haut et fort plutôt que de le laisser passer.
+  const { isCookieSecure } = await import("./modules/Authentification/Jwt");
+
+  if (process.env.NODE_ENV === "production" && !isCookieSecure(process.env)) {
+    console.warn(
+      "ATTENTION : NODE_ENV=production mais le cookie de session n'est PAS Secure (COOKIE_SECURE désarmé). La session voyage en clair sur HTTP. Retirez COOKIE_SECURE ou mettez-la à 1.",
+    );
+  }
+
   const { default: app } = await import("./app");
 
   app

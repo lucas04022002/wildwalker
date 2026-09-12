@@ -67,8 +67,13 @@ RUN npm ci --omit=dev --workspace=server --include-workspace-root \
   && npm cache clean --force
 
 # Code compilé, SQL, images du serveur, et le client construit.
+#
+# `server/database` n'est PAS copié : `npm run build` a déjà rangé les
+# fichiers SQL dans `dist/database` (scripts/copy-sql.mjs), et c'est là que
+# `dist/bin/migrate.js` et `dist/bin/seed.js` les cherchent — ils résolvent
+# depuis `__dirname/..`. La copie faisait double emploi, avec le risque
+# qu'on finisse par corriger le mauvais des deux exemplaires.
 COPY --from=build /app/server/dist ./server/dist
-COPY --from=build /app/server/database ./server/database
 COPY --from=build /app/server/public ./server/public
 COPY --from=build /app/client/dist ./client/dist
 
@@ -81,7 +86,7 @@ RUN mkdir -p /app/server/public/uploads \
 USER node
 
 # Le serveur résout le dossier d'uploads depuis `process.cwd()`
-# (server/public/upload/upload.ts) : le répertoire de travail fait partie
+# (server/src/upload/upload.ts) : le répertoire de travail fait partie
 # du contrat, pas du confort.
 WORKDIR /app/server
 

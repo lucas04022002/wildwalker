@@ -11,19 +11,6 @@ type TimeSlot = {
 };
 
 class TimeSlotRepository {
-  // The C of CRUD - Create operation
-  /* 
-  async create(time_slot: Omit<TimeSlot, "id">) {
-    // Execute the SQL INSERT query to add a new item to the "item" table
-    const [result] = await databaseLeLocal.query<Result>(
-      "insert into item (title, user_id) values (?, ?)",
-      [time_slot.time_slot_name, time_slot.id],
-    );
-
-    // Return the ID of the newly inserted item
-    return result.insertId;
-  } */
-
   // The Rs of CRUD - Read operations
 
   async read(id: number) {
@@ -62,19 +49,10 @@ class TimeSlotRepository {
     return (rows[0] as TimeSlot) ?? null;
   }
 
-  // The U of CRUD - Update operation
-  // TODO: Implement the update operation to modify an existing item
-
-  // async update(item: Item) {
-  //   ...
-  // }
-
-  // The D of CRUD - Delete operation
-  // TODO: Implement the delete operation to remove an item by its ID
-
-  // async delete(id: number) {
-  //   ...
-  // }
+  // Les créneaux sont des données de référence : ils sont posés par la
+  // migration et le seed, et aucune route ne les modifie. Pas d'`update` ni
+  // de `delete` ici — les deux TODO du gabarit sont retirés plutôt que
+  // laissés à traîner comme une dette imaginaire.
 }
 
 export default new TimeSlotRepository();

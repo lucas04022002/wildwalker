@@ -1,6 +1,5 @@
 import express from "express";
 
-import { upload } from "../public/upload/upload";
 import authMiddleware from "./Middlewares/authMiddleware";
 import cartMiddleware from "./Middlewares/cartMiddleware";
 import eventMiddleware from "./Middlewares/eventMiddleware";
@@ -17,6 +16,7 @@ import eventActions from "./modules/event/eventActions";
 import healthActions from "./modules/health/healthActions";
 import spaceActions from "./modules/space/spaceActions";
 import timeSlotActions from "./modules/timeSlot/timeSlotActions";
+import { upload } from "./upload/upload";
 
 const router = express.Router();
 
