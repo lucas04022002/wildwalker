@@ -10,3 +10,7 @@ build
 
 # Secrets locaux
 .env
+
+# Fichiers uploadés par les utilisateurs (non versionnés)
+server/public/uploads/*
+!server/public/uploads/.gitkeep

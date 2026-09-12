@@ -1,11 +1,11 @@
 import "./CardSpace.css";
 import { AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import localVideImg from "../../../../assets/images/empty-space.png";
-import sallereunionImg from "../../../../assets/images/meeting-room.png";
-import openspaceImg from "../../../../assets/images/openspace.png";
-import studioPhotoImg from "../../../../assets/images/photo-studio.png";
-import studioEnregImg from "../../../../assets/images/studios.png";
+import localVideImg from "../../../../assets/images/empty-space.webp";
+import sallereunionImg from "../../../../assets/images/meeting-room.webp";
+import openspaceImg from "../../../../assets/images/openspace.webp";
+import studioPhotoImg from "../../../../assets/images/photo-studio.webp";
+import studioEnregImg from "../../../../assets/images/studios.webp";
 import type { Space } from "../../../../types/space";
 import SpaceModal from "../SpaceModal/SpaceModal";
 import SpaceModalContent from "../SpaceModal/SpaceModalContent/SpaceModalContent";

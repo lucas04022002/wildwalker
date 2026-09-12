@@ -2,7 +2,7 @@ import "./NavBar.css";
 import { ShoppingCart, UserCircle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
-import ImgTitle from "../../assets/images/ImgTitleLeLocale.png";
+import ImgTitle from "../../assets/images/ImgTitleLeLocale.webp";
 import { useSession } from "../../hooks/useSession";
 
 function NavBar() {
