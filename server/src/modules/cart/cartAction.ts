@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import databaseLeLocal from "../../../database/client";
+import { lineAmountInEuros } from "../Payment/amount";
 import eventRepository from "../event/eventRepository";
 import cartRepository from "./cartRepository";
 
@@ -43,8 +44,9 @@ const addEvent: RequestHandler = async (req, res, next) => {
 
   const connection = await databaseLeLocal.getConnection();
   try {
-    // middleware a déjà tout converti en nombres.
-    const { event_id, quantity, total_price } = req.body;
+    // middleware a déjà tout converti en nombres. `total_price` du corps de
+    // la requête est ignoré : le prix est relu en base ci-dessous.
+    const { event_id, quantity } = req.body;
 
     await connection.beginTransaction();
 
@@ -65,11 +67,31 @@ const addEvent: RequestHandler = async (req, res, next) => {
       return;
     }
 
+    const pricing = await eventRepository.readPricingForUpdate(
+      connection,
+      event_id,
+    );
+
+    if (pricing == null) {
+      await connection.rollback();
+      res.sendStatus(404);
+      return;
+    }
+
+    // Prix d'une unité, durée comprise (un « Local vide » se loue au mois).
+    const unitTotal = lineAmountInEuros({
+      quantity: 1,
+      price_unit: pricing.price_unit,
+      space_category: pricing.space_category,
+      start_date: pricing.start_date,
+      end_date: pricing.end_date,
+    });
+
     const newItem = {
       users_id: userId,
       id_activity: event_id,
       quantity,
-      total_price,
+      unitTotal,
     };
 
     const insertId = await cartRepository.create(connection, newItem);

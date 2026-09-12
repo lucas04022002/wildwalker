@@ -20,6 +20,12 @@ jest.mock("../src/modules/event/eventRepository", () => ({
   __esModule: true,
   default: {
     readRemainingSlotsByEvent: jest.fn(async () => 50),
+    readPricingForUpdate: jest.fn(async () => ({
+      price_unit: "10.00",
+      start_date: "2026-10-01",
+      end_date: "2026-10-01",
+      space_category: "Openspace",
+    })),
   },
 }));
 
@@ -62,6 +68,16 @@ describe("garde d'origine sur les routes non-GET", () => {
       .post("/api/cart")
       .set("Cookie", sessionCookie(clientUser))
       .set("Origin", "http://attaquant.test")
+      .send(body);
+
+    expect(res.status).toBe(403);
+  });
+
+  test("403 quand Origin vaut « null » (bac à sable, redirection)", async () => {
+    const res = await request(app)
+      .post("/api/cart")
+      .set("Cookie", sessionCookie(clientUser))
+      .set("Origin", "null")
       .send(body);
 
     expect(res.status).toBe(403);

@@ -22,6 +22,26 @@ const openSession = (
   res.cookie(COOKIE_NAME, token, jwtUtil.cookieOptions());
 };
 
+/**
+ * Hash factice, vérifié quand l'adresse est inconnue.
+ *
+ * Sans lui, un compte inexistant répond bien plus vite qu'un mot de passe
+ * faux (argon2 n'est pas appelé), et ce simple écart de temps suffit à
+ * énumérer les comptes. Ce n'est pas un secret : c'est le hash d'une chaîne
+ * aléatoire que personne ne connaît, et dont la valeur n'a aucune importance.
+ */
+const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=4$9rkGhYTbImsSsSjIU05vtA$EjJgdKggaFEAPn+mQOGMtXSEHL4hg4Kll2ooTXv7iCc";
+
+/**
+ * Réponse unique de l'inscription.
+ *
+ * Elle est identique que l'adresse soit libre ou déjà prise : un formulaire
+ * public qui répond « ce compte existe déjà » est un outil d'énumération.
+ * Le conflit est seulement noté côté serveur.
+ */
+const REGISTER_ACCEPTED = "Si l'adresse est disponible, le compte est créé.";
+
 // Inscription : crée toujours un compte avec le role "client"
 const register: RequestHandler = async (req, res, next) => {
   try {
@@ -33,15 +53,17 @@ const register: RequestHandler = async (req, res, next) => {
       return;
     }
 
+    // Le hachage a lieu dans les deux cas : même travail, même temps de
+    // réponse, que l'adresse existe ou non.
+    const passwordHash = await argon2.hash(password);
+
     const existing = await authRepository.findByEmail(email);
+
     if (existing) {
-      res
-        .status(409)
-        .json({ message: "Un compte existe déjà avec cet email." });
+      console.info("Inscription refusée : adresse déjà utilisée.");
+      res.status(201).json({ message: REGISTER_ACCEPTED });
       return;
     }
-
-    const passwordHash = await argon2.hash(password);
 
     const user = await authRepository.create({
       firstname,
@@ -60,8 +82,9 @@ const register: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    openSession(res, user);
-    res.status(201).json({ user });
+    // Aucune session ouverte ici : le corps de la réponse doit être le même
+    // dans les deux cas, en-têtes compris. L'utilisateur se connecte ensuite.
+    res.status(201).json({ message: REGISTER_ACCEPTED });
   } catch (err) {
     next(err);
   }
@@ -91,6 +114,9 @@ const loginWithRole = async (
 
   const user = await authRepository.findByEmail(email);
   if (!user) {
+    // Vérification contre un hash factice : même coût de calcul que pour un
+    // compte réel, donc aucun écart de temps à mesurer.
+    await argon2.verify(DUMMY_PASSWORD_HASH, password);
     invalidCredentials();
     return;
   }
@@ -158,3 +184,4 @@ const me: RequestHandler = async (req, res, next) => {
 };
 
 export default { register, loginClient, loginAdmin, logout, me };
+export { DUMMY_PASSWORD_HASH, REGISTER_ACCEPTED };

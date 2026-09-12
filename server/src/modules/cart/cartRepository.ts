@@ -7,7 +7,8 @@ type CartItem = {
   users_id: number;
   id_activity: number;
   quantity: number;
-  total_price: number;
+  /** Prix d'une unité, durée comprise. Le total en découle, jamais l'inverse. */
+  unitTotal: number;
 };
 
 const readAll = async (userId: number) => {
@@ -53,6 +54,9 @@ const readAll = async (userId: number) => {
   return rows;
 };
 
+/** Arrondi au centime : la colonne `total_price` est un DECIMAL(10,2). */
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
 const create = async (
   connection: PoolConnection,
   item: Omit<CartItem, "id">,
@@ -64,16 +68,23 @@ const create = async (
 
   if (existing.length > 0) {
     const newQuantity = existing[0].quantity + item.quantity;
+    // Le total suit la quantité : sans cela la ligne fusionnée garderait le
+    // total de la première réservation.
     await connection.query<ResultSetHeader>(
-      "UPDATE cart SET quantity = ? WHERE id = ?",
-      [newQuantity, existing[0].id],
+      "UPDATE cart SET quantity = ?, total_price = ? WHERE id = ?",
+      [newQuantity, round2(item.unitTotal * newQuantity), existing[0].id],
     );
     return existing[0].id;
   }
 
   const [result] = await connection.query<ResultSetHeader>(
     "INSERT INTO cart (users_id, id_activity, quantity, total_price) VALUES (?, ?, ?, ?)",
-    [item.users_id, item.id_activity, item.quantity, item.total_price],
+    [
+      item.users_id,
+      item.id_activity,
+      item.quantity,
+      round2(item.unitTotal * item.quantity),
+    ],
   );
 
   return result.insertId;

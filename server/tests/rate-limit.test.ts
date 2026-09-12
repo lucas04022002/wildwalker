@@ -17,7 +17,12 @@ jest.mock("../src/modules/Authentification/AuthentificationRepository", () => ({
   },
 }));
 
-import { resetLoginLimiter } from "../src/Middlewares/rateLimit";
+import type { Request, Response } from "express";
+import {
+  MAX_TRACKED_KEYS,
+  loginLimiter,
+  resetLoginLimiter,
+} from "../src/Middlewares/rateLimit";
 import app from "../src/app";
 
 const attempt = (email: string) =>
@@ -62,5 +67,62 @@ describe("limite de débit au login", () => {
     const res = await attempt("CIBLE@Exemple.TEST");
 
     expect(res.status).toBe(429);
+  });
+});
+
+/* ************************************************************************* */
+/* La Map ne doit pas grandir indéfiniment : c'est une fuite de mémoire      */
+/* qu'un attaquant contrôle (une clé par adresse essayée).                   */
+/* ************************************************************************* */
+
+/** Appelle le middleware hors HTTP, pour pouvoir en enchaîner des milliers. */
+const hit = (email: string): void => {
+  const req = { body: { email }, ip: "::1" } as unknown as Request;
+  const res = {
+    set: () => res,
+    status: () => res,
+    json: () => res,
+  } as unknown as Response;
+
+  loginLimiter(req, res, () => undefined);
+};
+
+describe("empreinte mémoire du limiteur", () => {
+  beforeEach(() => {
+    resetLoginLimiter();
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    resetLoginLimiter();
+  });
+
+  test("purge les compteurs expirés au fil des insertions", () => {
+    const start = Date.now();
+    jest.spyOn(Date, "now").mockReturnValue(start);
+
+    for (let i = 0; i < 99; i += 1) {
+      hit(`essai${i}@exemple.fr`);
+    }
+    expect(loginLimiter.size()).toBe(99);
+
+    // Une fois la fenêtre passée, la centième insertion déclenche le balayage.
+    jest.spyOn(Date, "now").mockReturnValue(start + 16 * 60 * 1000);
+    hit("apres@exemple.fr");
+
+    expect(loginLimiter.size()).toBe(1);
+  });
+
+  test("plafonne le nombre de clés suivies et évince les plus anciennes", () => {
+    const start = Date.now();
+    jest.spyOn(Date, "now").mockReturnValue(start);
+
+    for (let i = 0; i < MAX_TRACKED_KEYS + 500; i += 1) {
+      hit(`saturation${i}@exemple.fr`);
+    }
+
+    expect(loginLimiter.size()).toBeLessThanOrEqual(MAX_TRACKED_KEYS);
+    expect(loginLimiter.size()).toBeGreaterThan(0);
   });
 });

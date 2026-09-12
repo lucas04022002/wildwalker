@@ -2,12 +2,12 @@ import type { RequestHandler } from "express";
 import Joi from "joi";
 
 // Schéma pour la CRÉATION (POST)
-// `users_id` n'est volontairement pas accepté : le propriétaire de la ligne
-// vient du jeton de session. `stripUnknown` le retire s'il est envoyé.
+// `users_id` et `total_price` ne sont volontairement pas acceptés : le
+// propriétaire de la ligne vient du jeton, le prix est relu en base.
+// `stripUnknown` les retire s'ils sont envoyés.
 const addEventSchema = Joi.object({
   event_id: Joi.number().integer().positive().required(),
   quantity: Joi.number().integer().positive().required(),
-  total_price: Joi.number().min(0).required(),
   last_name: Joi.string()
     .pattern(/^[A-Za-zÀ-ÖØ-öø-ÿ\s'-]+$/)
     .min(2)

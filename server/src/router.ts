@@ -4,7 +4,7 @@ import { upload } from "../public/upload/upload";
 import authMiddleware from "./Middlewares/authMiddleware";
 import cartMiddleware from "./Middlewares/cartMiddleware";
 import eventMiddleware from "./Middlewares/eventMiddleware";
-import { loginLimiter } from "./Middlewares/rateLimit";
+import { loginLimiter, registerLimiter } from "./Middlewares/rateLimit";
 import authActions from "./modules/Authentification/AuthentificationAction";
 import paymentActions from "./modules/Payment/PaymentAction";
 import activityActions from "./modules/activity/activityActions";
@@ -22,7 +22,7 @@ const router = express.Router();
 /* ************************************************************************* */
 // Auth routes (publiques)
 /* ************************************************************************* */
-router.post("/api/auth/register", authActions.register);
+router.post("/api/auth/register", registerLimiter, authActions.register);
 router.post("/api/auth/login/client", loginLimiter, authActions.loginClient);
 router.post("/api/auth/login/admin", loginLimiter, authActions.loginAdmin);
 router.post("/api/auth/logout", authActions.logout);

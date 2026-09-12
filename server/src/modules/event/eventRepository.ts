@@ -118,6 +118,40 @@ class EventRepository {
     return Number(row.remaining_slots);
   }
 
+  /**
+   * Prix et durée d'une activité, lus sous verrou dans la transaction
+   * d'ajout au panier. C'est cette lecture qui fixe le montant : le total
+   * envoyé par le client n'est jamais utilisé.
+   */
+  async readPricingForUpdate(
+    connection: PoolConnection,
+    activityId: number,
+  ): Promise<{
+    price_unit: string | number;
+    start_date: string | Date;
+    end_date: string | Date;
+    space_category: string;
+  } | null> {
+    const [rows] = await connection.query<Rows>(
+      `SELECT a.price_unit, a.start_date, a.end_date, s.space_category
+         FROM activity a
+         JOIN space s ON s.id = a.space_id
+        WHERE a.id = ?
+        FOR UPDATE`,
+      [activityId],
+    );
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return row as {
+      price_unit: string | number;
+      start_date: string | Date;
+      end_date: string | Date;
+      space_category: string;
+    };
+  }
+
   async browseEventsOfTheDay(date: string) {
     const [rows] = await databaseLeLocal.query<Rows>(
       `SELECT

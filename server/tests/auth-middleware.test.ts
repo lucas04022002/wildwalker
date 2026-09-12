@@ -32,8 +32,10 @@ jest.mock("argon2", () => ({
   },
 }));
 
+import argon2 from "argon2";
 import { resetLoginLimiter } from "../src/Middlewares/rateLimit";
 import app from "../src/app";
+import { DUMMY_PASSWORD_HASH } from "../src/modules/Authentification/AuthentificationAction";
 import authRepository from "../src/modules/Authentification/AuthentificationRepository";
 import {
   adminUser,
@@ -183,5 +185,113 @@ describe("login par rôle", () => {
     expect(res.status).toBe(204);
     const [cookie] = res.headers["set-cookie"] as unknown as string[];
     expect(cookie).toMatch(/^ww_session=;/);
+  });
+});
+
+/* ************************************************************************* */
+/* Le login ne doit rien apprendre sur l'existence d'un compte.              */
+/* ************************************************************************* */
+
+describe("login, e-mail inconnu", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetLoginLimiter();
+  });
+
+  test("vérifie quand même un hash factice, pour un temps de réponse identique", async () => {
+    (authRepository.findByEmail as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(app)
+      .post("/api/auth/login/client")
+      .send({ email: "inconnu@exemple.fr", password: "peu-importe" });
+
+    expect(res.status).toBe(401);
+    expect(argon2.verify).toHaveBeenCalledWith(
+      DUMMY_PASSWORD_HASH,
+      "peu-importe",
+    );
+  });
+});
+
+/* ************************************************************************* */
+/* L'inscription ne doit pas dire si une adresse est déjà prise.             */
+/* ************************************************************************* */
+
+const registration = {
+  firstname: "Dominique",
+  lastname: "Martin",
+  email: "nouvelle@exemple.fr",
+  password: "un-mot-de-passe-long",
+  phone_number: "0600000000",
+};
+
+describe("inscription", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetLoginLimiter();
+  });
+
+  test("répond un message générique quand l'adresse est libre", async () => {
+    (authRepository.findByEmail as jest.Mock).mockResolvedValue(null);
+    (authRepository.create as jest.Mock).mockResolvedValue({
+      ...dbUser("client"),
+      email: registration.email,
+    });
+
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send(registration);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({
+      message: "Si l'adresse est disponible, le compte est créé.",
+    });
+    expect(res.body.user).toBeUndefined();
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+
+  test("répond exactement pareil quand l'adresse est déjà prise", async () => {
+    (authRepository.findByEmail as jest.Mock).mockResolvedValue(
+      dbUser("client"),
+    );
+
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send(registration);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({
+      message: "Si l'adresse est disponible, le compte est créé.",
+    });
+    expect(authRepository.create).not.toHaveBeenCalled();
+  });
+
+  test("hache le mot de passe dans les deux cas (temps de réponse comparable)", async () => {
+    (authRepository.findByEmail as jest.Mock).mockResolvedValue(
+      dbUser("client"),
+    );
+
+    await request(app).post("/api/auth/register").send(registration);
+
+    expect(argon2.hash).toHaveBeenCalledTimes(1);
+  });
+
+  test("le 11e essai sur la même adresse est refusé en 429", async () => {
+    (authRepository.findByEmail as jest.Mock).mockResolvedValue(null);
+    (authRepository.create as jest.Mock).mockResolvedValue(dbUser("client"));
+
+    for (let i = 0; i < 10; i += 1) {
+      const res = await request(app)
+        .post("/api/auth/register")
+        .send(registration);
+      expect(res.status).toBe(201);
+    }
+
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send(registration);
+
+    expect(res.status).toBe(429);
+    expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
   });
 });

@@ -22,7 +22,11 @@ jest.mock("../database/client", () => ({
 }));
 
 import app from "../src/app";
-import { computeCartAmount } from "../src/modules/Payment/amount";
+import {
+  billableMonths,
+  computeCartAmount,
+  monthsBetween,
+} from "../src/modules/Payment/amount";
 import { clientUser, sessionCookie } from "./helpers/session";
 
 describe("computeCartAmount", () => {
@@ -61,9 +65,71 @@ describe("computeCartAmount", () => {
     ).toBe(2000);
   });
 
+  test("facture un « Local vide » au mois : 25 € x 6 mois = 15000", () => {
+    expect(
+      computeCartAmount([
+        {
+          quantity: 1,
+          price_unit: "25.00",
+          space_category: "Local vide",
+          start_date: "2026-01-10",
+          end_date: "2026-07-10",
+        },
+      ]),
+    ).toBe(15000);
+  });
+
+  test("ne multiplie pas par les mois hors « Local vide »", () => {
+    expect(
+      computeCartAmount([
+        {
+          quantity: 1,
+          price_unit: "25.00",
+          space_category: "Openspace",
+          start_date: "2026-01-10",
+          end_date: "2026-07-10",
+        },
+      ]),
+    ).toBe(2500);
+  });
+
+  test("un « Local vide » compte au moins un mois", () => {
+    expect(
+      computeCartAmount([
+        {
+          quantity: 1,
+          price_unit: "25.00",
+          space_category: "Local vide",
+          start_date: "2026-01-10",
+          end_date: "2026-01-20",
+        },
+      ]),
+    ).toBe(2500);
+  });
+
   test("rend toujours un entier", () => {
     const amount = computeCartAmount([{ quantity: 3, price_unit: "0.105" }]);
     expect(Number.isInteger(amount)).toBe(true);
+  });
+});
+
+describe("monthsBetween et billableMonths", () => {
+  test("compte les mois entiers, jamais négatif", () => {
+    expect(monthsBetween("2026-01-10", "2026-07-10")).toBe(6);
+    expect(monthsBetween("2026-01-10", "2026-07-09")).toBe(5);
+    expect(monthsBetween("2026-07-10", "2026-01-10")).toBe(0);
+  });
+
+  test("vaut 1 pour tout ce qui n'est pas mensuel", () => {
+    expect(
+      billableMonths({
+        quantity: 1,
+        price_unit: 10,
+        space_category: "Atelier",
+        start_date: "2026-01-10",
+        end_date: "2026-07-10",
+      }),
+    ).toBe(1);
   });
 });
 
@@ -110,6 +176,43 @@ describe("POST /api/payment/create-intent", () => {
 
     expect(res.status).toBe(400);
     expect(mockPaymentIntentCreate).not.toHaveBeenCalled();
+  });
+
+  test("un « Local vide » de six mois se facture 15000 centimes", async () => {
+    mockQuery.mockResolvedValue([
+      [
+        {
+          quantity: 1,
+          price_unit: "25.00",
+          space_category: "Local vide",
+          start_date: "2026-01-10",
+          end_date: "2026-07-10",
+        },
+      ],
+      [],
+    ] as never);
+
+    const res = await request(app)
+      .post("/api/payment/create-intent")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({ amount: 2500 });
+
+    expect(res.status).toBe(200);
+    expect(mockPaymentIntentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 15000 }),
+    );
+  });
+
+  test("la requête du panier joint l'espace et les dates de l'activité", async () => {
+    await request(app)
+      .post("/api/payment/create-intent")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({});
+
+    const [sql] = mockQuery.mock.calls[0] as unknown as [string];
+    expect(sql).toMatch(/space_category/i);
+    expect(sql).toMatch(/start_date/i);
+    expect(sql).toMatch(/end_date/i);
   });
 
   test("401 sans session", async () => {

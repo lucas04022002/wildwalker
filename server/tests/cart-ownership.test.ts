@@ -31,11 +31,18 @@ jest.mock("../src/modules/event/eventRepository", () => ({
   __esModule: true,
   default: {
     readRemainingSlotsByEvent: jest.fn(async () => 50),
+    readPricingForUpdate: jest.fn(async () => ({
+      price_unit: "8.00",
+      start_date: "2026-10-01",
+      end_date: "2026-10-01",
+      space_category: "Openspace",
+    })),
   },
 }));
 
 import app from "../src/app";
 import cartRepository from "../src/modules/cart/cartRepository";
+import eventRepository from "../src/modules/event/eventRepository";
 import { clientUser, sessionCookie } from "./helpers/session";
 
 const OTHER_USER_ID = 999;
@@ -43,6 +50,12 @@ const OTHER_USER_ID = 999;
 describe("propriété des lignes de panier", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (eventRepository.readPricingForUpdate as jest.Mock).mockResolvedValue({
+      price_unit: "8.00",
+      start_date: "2026-10-01",
+      end_date: "2026-10-01",
+      space_category: "Openspace",
+    });
   });
 
   test("GET /api/cart lit le panier de l'utilisateur du jeton", async () => {
@@ -129,6 +142,72 @@ describe("propriété des lignes de panier", () => {
       connection,
       expect.objectContaining({ users_id: clientUser.id }),
     );
+  });
+
+  test("POST /api/cart calcule le total en base et ignore total_price du body", async () => {
+    const res = await request(app)
+      .post("/api/cart")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({
+        event_id: 3,
+        quantity: 3,
+        total_price: 999999,
+        last_name: "Martin",
+        first_name: "Dominique",
+        email: "dominique@exemple.fr",
+      });
+
+    expect(res.status).toBe(201);
+    expect(cartRepository.create).toHaveBeenCalledWith(
+      connection,
+      expect.objectContaining({ quantity: 3, unitTotal: 8 }),
+    );
+  });
+
+  test("POST /api/cart facture un « Local vide » au mois", async () => {
+    (eventRepository.readPricingForUpdate as jest.Mock).mockResolvedValue({
+      price_unit: "450.00",
+      start_date: "2026-01-10",
+      end_date: "2026-07-10",
+      space_category: "Local vide",
+    });
+
+    const res = await request(app)
+      .post("/api/cart")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({
+        event_id: 3,
+        quantity: 1,
+        total_price: 450,
+        last_name: "Martin",
+        first_name: "Dominique",
+        email: "dominique@exemple.fr",
+      });
+
+    expect(res.status).toBe(201);
+    expect(cartRepository.create).toHaveBeenCalledWith(
+      connection,
+      expect.objectContaining({ unitTotal: 2700 }),
+    );
+  });
+
+  test("404 quand l'activité n'existe pas", async () => {
+    (eventRepository.readPricingForUpdate as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(app)
+      .post("/api/cart")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({
+        event_id: 404,
+        quantity: 1,
+        total_price: 10,
+        last_name: "Martin",
+        first_name: "Dominique",
+        email: "dominique@exemple.fr",
+      });
+
+    expect(res.status).toBe(404);
+    expect(cartRepository.create).not.toHaveBeenCalled();
   });
 
   test("401 sans session sur les mutations du panier", async () => {

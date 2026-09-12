@@ -4,22 +4,34 @@ type QueryCall = [string, unknown[]?];
 
 const calls: QueryCall[] = [];
 
+const STANDARD_LINE = {
+  id: 11,
+  quantity: 2,
+  price_unit: "40.00",
+  id_activity: 3,
+  space_category: "Openspace",
+  start_date: "2026-10-01",
+  end_date: "2026-10-01",
+};
+
+const MONTHLY_LINE = {
+  id: 12,
+  quantity: 1,
+  price_unit: "25.00",
+  id_activity: 4,
+  space_category: "Local vide",
+  start_date: "2026-01-10",
+  end_date: "2026-07-10",
+};
+
+let cartRows: Record<string, unknown>[] = [STANDARD_LINE];
+
 const connection = {
   query: jest.fn(async (sql: string, params?: unknown[]) => {
     calls.push([sql, params]);
 
     if (/from\s+cart\s+c/i.test(sql)) {
-      return [
-        [
-          {
-            id: 11,
-            quantity: 2,
-            price_unit: "40.00",
-            id_activity: 3,
-          },
-        ],
-        [],
-      ];
+      return [cartRows, []];
     }
 
     if (/count\(\*\)/i.test(sql)) {
@@ -82,6 +94,7 @@ const findCall = (pattern: RegExp): QueryCall | undefined =>
 describe("POST /api/booking", () => {
   beforeEach(() => {
     calls.length = 0;
+    cartRows = [STANDARD_LINE];
     jest.clearAllMocks();
   });
 
@@ -128,6 +141,32 @@ describe("POST /api/booking", () => {
 
     const remove = findCall(/delete\s+from\s+cart/i);
     expect(remove?.[1]).toEqual([clientUser.id]);
+  });
+
+  test("un « Local vide » de six mois se réserve 150 €", async () => {
+    cartRows = [MONTHLY_LINE];
+
+    const res = await request(app)
+      .post("/api/booking")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({});
+
+    expect(res.status).toBe(201);
+
+    const insert = findCall(/insert\s+into\s+booking/i);
+    const params = insert?.[1] as unknown[];
+    expect(params[3]).toBe(150);
+  });
+
+  test("la lecture du panier joint l'espace et les dates de l'activité", async () => {
+    await request(app)
+      .post("/api/booking")
+      .set("Cookie", sessionCookie(clientUser))
+      .send({});
+
+    const select = findCall(/from\s+cart\s+c/i);
+    expect(select?.[0]).toMatch(/space_category/i);
+    expect(select?.[0]).toMatch(/start_date/i);
   });
 
   test("401 sans session", async () => {

@@ -92,4 +92,19 @@ const logErrors: ErrorRequestHandler = (err, req, res, next) => {
 
 app.use(logErrors);
 
+/**
+ * Dernier filet. Sans lui, Express répond avec la pile d'appel en clair hors
+ * production : chemins de fichiers, requêtes SQL et noms de colonnes offerts
+ * à qui provoque une erreur. Le détail reste dans les journaux du serveur.
+ */
+const handleErrors: ErrorRequestHandler = (_err, _req, res, _next) => {
+  if (res.headersSent) {
+    return;
+  }
+
+  res.status(500).json({ message: "Erreur serveur." });
+};
+
+app.use(handleErrors);
+
 export default app;

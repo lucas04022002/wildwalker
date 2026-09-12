@@ -23,12 +23,21 @@ const getStripe = (): Stripe => {
  * `cart.price_unit` porte le prix effectif posé par le serveur au moment de
  * la réservation (majoration « Journée » comprise) ; il n'est écrit que par
  * le serveur. À défaut, on retombe sur le prix de l'activité.
+ *
+ * La catégorie de l'espace et les dates de l'activité sont ramenées avec :
+ * un « Local vide » se loue au mois, et son prix unitaire doit être
+ * multiplié par la durée de la période (voir `amount.ts`).
  */
 const readCartPriceRows = async (userId: number): Promise<CartPriceRow[]> => {
   const [rows] = await databaseClient.query<Rows>(
-    `SELECT c.quantity, COALESCE(c.price_unit, a.price_unit) AS price_unit
+    `SELECT c.quantity,
+            COALESCE(c.price_unit, a.price_unit) AS price_unit,
+            a.start_date,
+            a.end_date,
+            s.space_category
        FROM cart c
        JOIN activity a ON a.id = c.id_activity
+       JOIN space s ON s.id = a.space_id
       WHERE c.users_id = ?`,
     [userId],
   );

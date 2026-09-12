@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import type { PoolConnection } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
+import { monthsBetween } from "../Payment/amount";
 import activityRepository from "../activity/activityRepository";
 import spaceRepository from "../space/spaceRepository";
 import timeSlotRepository from "../timeSlot/timeSlotRepository";
@@ -27,24 +28,6 @@ const DEFAULT_TIME_SLOT_ID = 4;
 const FULL_DAY_MULTIPLIER = 1.75;
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
-
-/**
- * Nombre de mois entiers entre deux dates (arrondi à l'entier inférieur,
- * jamais négatif). Même règle que celle affichée au client, mais calculée
- * ici : c'est elle qui fait foi.
- */
-const monthsBetween = (start: string, end: string): number => {
-  const from = new Date(start);
-  const to = new Date(end);
-
-  let months =
-    (to.getFullYear() - from.getFullYear()) * 12 +
-    (to.getMonth() - from.getMonth());
-
-  if (to.getDate() < from.getDate()) months -= 1;
-
-  return Math.max(months, 0);
-};
 
 /** Prix unitaire effectif, calculé depuis l'espace et le créneau lus en base. */
 const effectivePriceFor = async (
@@ -315,4 +298,3 @@ const add: RequestHandler = async (req, res, next) => {
 };
 
 export default { add, create };
-export { monthsBetween };

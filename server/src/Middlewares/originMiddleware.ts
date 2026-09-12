@@ -58,7 +58,10 @@ const assertSameOrigin: RequestHandler = (req, res, next) => {
 
   const origin = req.headers.origin;
 
-  if (typeof origin === "string" && origin !== "" && origin !== "null") {
+  // `Origin: null` (bac à sable, document local, certaines redirections) est
+  // une origine opaque : elle n'est jamais la nôtre, donc elle est refusée
+  // comme n'importe quelle origine étrangère.
+  if (typeof origin === "string" && origin !== "") {
     if (!allowedOrigins(req).includes(normalize(origin))) {
       refuse(res);
       return;

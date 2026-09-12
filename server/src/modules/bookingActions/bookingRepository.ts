@@ -1,10 +1,10 @@
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
+import { type CartPriceRow, lineAmountInEuros } from "../Payment/amount";
 
-type CartLine = {
+type CartLine = CartPriceRow & {
   id: number;
   quantity: number;
-  price_unit: number | string | null;
   id_activity: number;
 };
 
@@ -25,9 +25,13 @@ const readCartForUpdate = async (
     `SELECT c.id,
             c.quantity,
             COALESCE(c.price_unit, a.price_unit) AS price_unit,
-            c.id_activity
+            c.id_activity,
+            a.start_date,
+            a.end_date,
+            s.space_category
        FROM cart c
        JOIN activity a ON a.id = c.id_activity
+       JOIN space s ON s.id = a.space_id
       WHERE c.users_id = ?
       FOR UPDATE`,
     [userId],
@@ -71,9 +75,11 @@ const createFromCart = async (userId: number): Promise<number> => {
     const year = new Date().getFullYear();
 
     for (const line of lines) {
-      const priceUnit = Number(line.price_unit ?? 0);
       const quantity = Number(line.quantity ?? 0);
-      const totalPrice = Math.round(priceUnit * quantity * 100) / 100;
+      // Même règle de prix que le paiement : quantité, et durée en mois pour
+      // les locaux loués au mois. Un écart ici facturerait autre chose que ce
+      // que Stripe a encaissé.
+      const totalPrice = lineAmountInEuros(line);
       const billsNumber = await nextBillsNumber(connection, year);
 
       await connection.query(
