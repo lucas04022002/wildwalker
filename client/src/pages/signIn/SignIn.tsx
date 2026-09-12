@@ -1,6 +1,6 @@
 import { useState } from "react";
 import "../Login/Login.css";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { apiFetch } from "../../hooks/apiFetch";
 
 export default function SignIn() {
@@ -15,6 +15,7 @@ export default function SignIn() {
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -38,8 +39,13 @@ export default function SignIn() {
         return;
       }
 
-      localStorage.setItem("token", data.token);
-      window.location.href = "/dashboard-client";
+      // L'inscription n'ouvre pas de session : le serveur répond la même chose
+      // que l'adresse ait été libre ou déjà prise, sans poser de cookie. On
+      // renvoie donc vers la connexion, avec le message tel quel.
+      navigate("/log-in", {
+        replace: true,
+        state: { notice: data.message ?? "Votre compte a bien été créé." },
+      });
     } catch {
       setError("Impossible de contacter le serveur.");
     } finally {

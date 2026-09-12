@@ -92,6 +92,18 @@
       margin: 0;
     }
 
+    /* Confirmation (arrivée depuis la création de compte) */
+    & .auth-notice {
+      background: rgba(40, 120, 70, 0.08);
+      border: 1px solid rgba(40, 120, 70, 0.25);
+      color: var(--color-text-secondary);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      font-family: var(--font-body);
+      margin: 0;
+    }
+
     /* Champs — restent en haut */
     & .auth-fields {
       display: flex;

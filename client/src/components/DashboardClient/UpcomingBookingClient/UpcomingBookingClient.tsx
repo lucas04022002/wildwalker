@@ -3,10 +3,10 @@ import { useState } from "react";
 import useSpacesClient from "../../../hooks/useSpacesClient";
 import AllActivitiesModal from "../AllActivitiesModal/AllActivitiesModal";
 import "./UpcomingBookingClient.css";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useSession } from "../../../hooks/useSession";
 
 function UpcomingBookingClient() {
-  const user = useAuthContext();
+  const { user } = useSession();
   const bookings = useSpacesClient(user?.id ?? 0, "upcoming");
   const [showModal, setShowModal] = useState(false);
   const displayed = bookings.slice(0, 3);

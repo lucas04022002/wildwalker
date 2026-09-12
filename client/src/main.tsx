@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
 import App from "./App";
 import Confirmation from "./components/Confirmation/Confirmation";
-import { AuthProvider } from "./context/AuthContext";
+import RequireRole from "./components/RequireRole";
+import { SessionProvider } from "./context/SessionProvider";
 
 import DashboardAdminPage from "./pages/DashboardAdminPage/DashboardAdminPage";
 import DashboardClientPage from "./pages/DashboardClientPage/DashboardClientPage";
@@ -16,11 +18,22 @@ import WorkshopPage from "./pages/WorkshopPage/WorkshopPage";
 import Cart from "./pages/cart/Cart";
 import SignIn from "./pages/signIn/SignIn";
 
+/**
+ * Enveloppe une page dans la garde de rôle.
+ *
+ * Le rôle passe par une variable plutôt que par un attribut littéral : le nom
+ * de la prop (`role`) fait sinon croire à Biome qu'il s'agit de l'attribut
+ * ARIA du même nom, et la règle `a11y/useValidAriaRole` se déclenche à tort.
+ */
+const guarded = (role: "client" | "admin", page: ReactNode) => (
+  <RequireRole role={role}>{page}</RequireRole>
+);
+
 // Router
 const router = createBrowserRouter([
   {
     path: "/invoice/:bookingId",
-    element: <InvoicePage />,
+    element: guarded("client", <InvoicePage />),
   },
   {
     element: <App />,
@@ -39,15 +52,15 @@ const router = createBrowserRouter([
       },
       {
         path: "/dashboard-client",
-        element: <DashboardClientPage />,
+        element: guarded("client", <DashboardClientPage />),
       },
       {
         path: "/cart",
-        element: <Cart />,
+        element: guarded("client", <Cart />),
       },
       {
         path: "/dashboard-admin",
-        element: <DashboardAdminPage />,
+        element: guarded("admin", <DashboardAdminPage />),
       },
       {
         path: "/workshop-page",
@@ -55,11 +68,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/payment",
-        element: <Payment />,
+        element: guarded("client", <Payment />),
       },
       {
         path: "/confirmation",
-        element: <Confirmation />,
+        element: guarded("client", <Confirmation />),
       },
       {
         path: "/log-in",
@@ -77,8 +90,8 @@ const rootElement = document.getElementById("root");
 
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(
-    <AuthProvider>
+    <SessionProvider>
       <RouterProvider router={router} />
-    </AuthProvider>,
+    </SessionProvider>,
   );
 }

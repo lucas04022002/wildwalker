@@ -2,7 +2,6 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./Cart.css";
 import { Link } from "react-router";
-import { useAuthContext } from "../../context/AuthContext";
 import { apiFetch } from "../../hooks/apiFetch";
 import useCart from "../../hooks/useCart";
 import type { CartItem } from "../../types/cart";
@@ -18,8 +17,7 @@ const formatHour = (hour: string) => {
 };
 
 function Cart() {
-  const user = useAuthContext();
-  const cart = useCart(user?.id ?? 0);
+  const cart = useCart();
   const [carts, setCarts] = useState<CartItem[]>(cart);
   const [message, setMessage] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -255,18 +253,9 @@ function Cart() {
             )}
           </div>
 
-          <Link
-            to="/payment"
-            state={{
-              totalPrice: discountedTotal,
-              cartItems: carts.map((item) => ({
-                id_activity: item.id_activity,
-                quantity: item.quantity,
-                price_unit: item.price_unit * (1 - discount / 100),
-              })),
-              userId: user?.id,
-            }}
-          >
+          {/* Aucun montant ni panier transmis : la page de paiement demande
+              le total au serveur, qui le calcule depuis le panier en base. */}
+          <Link to="/payment">
             <button type="button" className="cart-payment-button">
               Procéder au paiement
             </button>

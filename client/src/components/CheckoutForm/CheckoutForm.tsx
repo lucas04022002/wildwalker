@@ -8,12 +8,10 @@ import { apiFetch } from "../../hooks/apiFetch";
 
 interface Props {
   totalPrice: number;
-  userId: number;
-  cartItems: { id_activity: number; quantity: number; price_unit: number }[];
   onSuccess: () => void;
 }
 
-function CheckoutForm({ totalPrice, userId, cartItems, onSuccess }: Props) {
+function CheckoutForm({ totalPrice, onSuccess }: Props) {
   const stripe = useStripe();
   const elements = useElements();
   const [isLoading, setIsLoading] = useState(false);
@@ -40,13 +38,10 @@ function CheckoutForm({ totalPrice, userId, cartItems, onSuccess }: Props) {
     } else {
       setIsPaid(true);
 
-      const response = await apiFetch("/api/booking", {
-        method: "POST",
-        body: JSON.stringify({ userId, cartItems }),
-      });
-      console.log({ userId, cartItems });
+      // Corps vide : le serveur transforme le panier de l'utilisateur
+      // connecté en réservations, aux prix relus en base.
+      await apiFetch("/api/booking", { method: "POST" });
 
-      console.log("Réponse booking :", response.status);
       onSuccess();
     }
 
@@ -62,7 +57,7 @@ function CheckoutForm({ totalPrice, userId, cartItems, onSuccess }: Props) {
       {errorMessage && <p className="checkout-error">{errorMessage}</p>}
 
       <button type="submit" disabled={isLoading || !stripe}>
-        {isLoading ? "Traitement..." : `Payer ${totalPrice} €`}
+        {isLoading ? "Traitement..." : `Payer ${totalPrice.toFixed(2)} €`}
       </button>
     </form>
   );

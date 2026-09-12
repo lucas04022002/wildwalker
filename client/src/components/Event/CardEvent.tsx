@@ -3,7 +3,7 @@ import { useEventModalContext } from "../../hooks/useEventModalContext";
 import RegisterEventForm from "../RegisterEventForm/RegisterEventForm";
 import "./CardEvent.css";
 import { useEffect, useState } from "react";
-import { useAuthContext } from "../../context/AuthContext";
+import { useSession } from "../../hooks/useSession";
 
 interface CardEventProps {
   event: {
@@ -29,7 +29,7 @@ interface CardEventProps {
 }
 
 function CardEvent({ event, participants }: CardEventProps) {
-  const user = useAuthContext();
+  const { user } = useSession();
 
   const capacity = event.capacity;
   const sumParticipants = participants?.sum_participants ?? 0;

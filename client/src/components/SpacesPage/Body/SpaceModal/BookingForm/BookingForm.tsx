@@ -10,7 +10,6 @@ import type { TimeSlot } from "../../../../../types/time-slot";
 type BookingFormProps = {
   space: Space;
   onBack: () => void;
-  userId: number;
 };
 
 /**
@@ -20,7 +19,7 @@ type BookingFormProps = {
  * - "Local vide" : réservation sur une plage de dates (date de début + date de fin choisies par l'utilisateur)
  * - tout le reste (salle de réunion, studio...) : réservation par créneau, un seul occupant possible
  */
-function BookingForm({ space, onBack, userId }: BookingFormProps) {
+function BookingForm({ space, onBack }: BookingFormProps) {
   const [date, setDate] = useState("");
   const [name, setName] = useState("");
   const [seats, setSeats] = useState(1);
@@ -127,6 +126,10 @@ function BookingForm({ space, onBack, userId }: BookingFormProps) {
     try {
       const endDate = isLocal ? endDateLocal : date;
 
+      // Le corps ne porte aucun prix ni identifiant d'utilisateur : le
+      // serveur relit le tarif de l'espace en base et rattache la ligne au
+      // titulaire du cookie de session. Le total affiché ci-dessus n'est
+      // qu'une estimation montrée à l'utilisateur.
       const payload = {
         space_id: space.id,
         time_slot_id: isLocal ? null : Number(selectedTimeSlot),
@@ -134,9 +137,6 @@ function BookingForm({ space, onBack, userId }: BookingFormProps) {
         end_date: endDate,
         seats: isOpenSpace ? seats : null,
         months: isLocal ? monthsCount : null,
-        users_id: userId,
-        total_price: totalPrice,
-        effective_price: effectivePrice,
         name,
       };
 

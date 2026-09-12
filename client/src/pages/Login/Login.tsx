@@ -1,19 +1,40 @@
 import { useState } from "react";
 import "./Login.css";
 import { Eye, EyeOff } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { apiFetch } from "../../hooks/apiFetch";
+import { useSession } from "../../hooks/useSession";
 
 type Tab = "client" | "admin";
+
+type LoginState = {
+  /** Page demandée avant la redirection vers le login (posée par RequireRole). */
+  from?: { pathname?: string };
+  /** Message affiché après une inscription réussie. */
+  notice?: string;
+};
+
+/**
+ * N'accepte qu'un chemin interne. Une valeur venant de l'historique de
+ * navigation ne doit jamais pouvoir devenir une redirection vers un autre
+ * site (`//exemple.fr` est une URL absolue pour le navigateur).
+ */
+const safePath = (pathname?: string): string | null =>
+  pathname?.startsWith("/") && !pathname.startsWith("//") ? pathname : null;
 
 export default function Login() {
   const [tab, setTab] = useState<Tab>("client");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { refresh } = useSession();
+  const state = (location.state ?? null) as LoginState | null;
+  const notice = state?.notice ?? null;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -36,14 +57,17 @@ export default function Login() {
         return;
       }
 
-      if (remember) {
-        localStorage.setItem("token", data.token);
-      } else {
-        sessionStorage.setItem("token", data.token);
-      }
+      // Aucun jeton à ranger : la session est un cookie httpOnly posé par le
+      // serveur, invisible pour ce code.
+      await refresh();
 
-      window.location.href =
-        tab === "admin" ? "/dashboard-admin" : "/dashboard-client";
+      const role = data.user?.role ?? tab;
+      const destination =
+        role === "admin"
+          ? "/dashboard-admin"
+          : (safePath(state?.from?.pathname) ?? "/dashboard-client");
+
+      navigate(destination, { replace: true });
     } catch {
       setError("Impossible de contacter le serveur.");
     } finally {
@@ -73,6 +97,8 @@ export default function Login() {
 
         <form className="auth-form-wrapper" onSubmit={handleSubmit}>
           <h1 className="auth-title">Saisissez vos identifiants</h1>
+
+          {notice && !error && <p className="auth-notice">{notice}</p>}
 
           {error && <p className="auth-error">{error}</p>}
 
@@ -125,16 +151,6 @@ export default function Login() {
                 </button>
               </div>
             </div>
-
-            <label className="auth-remember" htmlFor="remember">
-              <input
-                id="remember"
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-              />
-              Mémoriser mon mot de passe
-            </label>
           </div>
 
           <div className="auth-footer">

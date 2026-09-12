@@ -3,7 +3,7 @@ import { useState } from "react";
 import useBillingClient from "../../../hooks/useBillingClient";
 import useCreateClaim from "../../../hooks/useCreateClaim";
 import "./ClaimClient.css";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useSession } from "../../../hooks/useSession";
 
 const CATEGORIES = [
   "Espace",
@@ -14,7 +14,7 @@ const CATEGORIES = [
 ];
 
 function ClaimClient() {
-  const user = useAuthContext();
+  const { user } = useSession();
   const [category, setCategory] = useState("Espace");
   const [title, setTitle] = useState("");
   const [activityId, setActivityId] = useState("");

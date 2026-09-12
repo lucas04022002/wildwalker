@@ -6,12 +6,14 @@ import StatsClient from "../../components/DashboardClient/StatsClient/StatsClien
 import UpcomingBookingClient from "../../components/DashboardClient/UpcomingBookingClient/UpcomingBookingClient";
 import UpcomingEventClient from "../../components/DashboardClient/UpcomingEventClient/UpcomingEventClient";
 import FooterDashboard from "../../components/FooterDashboard/FooterDashboard";
-import { useAuth } from "../../hooks/useAuth";
+import { useSession } from "../../hooks/useSession";
 import "./DashboardClientPage.css";
 import { logout } from "../../hooks/apiFetch";
 
 export default function DashboardClientPage() {
-  const user = useAuth();
+  // La route est déjà gardée par RequireRole : arrivé ici, la session existe
+  // et son rôle est "client". Le garde-fou reste par sécurité d'affichage.
+  const { user } = useSession();
 
   if (!user) {
     return <p>Vous devez être connecté pour accéder à cette page.</p>;

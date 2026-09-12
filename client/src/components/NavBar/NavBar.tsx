@@ -3,10 +3,10 @@ import { ShoppingCart, UserCircle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import ImgTitle from "../../assets/images/ImgTitleLeLocale.png";
-import { useAuthContext } from "../../context/AuthContext";
+import { useSession } from "../../hooks/useSession";
 
 function NavBar() {
-  const user = useAuthContext();
+  const { user } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (

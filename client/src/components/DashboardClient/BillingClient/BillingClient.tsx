@@ -2,10 +2,10 @@ import { ReceiptText } from "lucide-react";
 import { useState } from "react";
 import useBillingClient from "../../../hooks/useBillingClient";
 import "./BillingClient.css";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useSession } from "../../../hooks/useSession";
 
 function BillingClient() {
-  const user = useAuthContext();
+  const { user } = useSession();
   const billing = useBillingClient(user?.id ?? 0);
 
   const [showAll, setShowAll] = useState(false);

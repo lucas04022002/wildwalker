@@ -1,8 +1,12 @@
+/**
+ * Corps de `POST /api/cart`.
+ *
+ * Ni `users_id` ni `total_price` : le serveur prend le premier dans le cookie
+ * de session et calcule le second à partir du prix en base.
+ */
 export type CartItem = {
-  users_id: number;
   event_id: number;
   quantity: number;
-  total_price: number;
   last_name?: string;
   first_name?: string;
   email?: string;

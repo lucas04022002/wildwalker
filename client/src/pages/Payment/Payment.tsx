@@ -1,37 +1,55 @@
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router";
 import CheckoutForm from "../../components/CheckoutForm/CheckoutForm";
 import "./Payment.css";
-import { useAuthContext } from "../../context/AuthContext";
 import { apiFetch } from "../../hooks/apiFetch";
 import useClearCart from "../../hooks/useClearCart";
+import { useSession } from "../../hooks/useSession";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 function Payment() {
-  const user = useAuthContext();
-  const location = useLocation();
-  const totalPrice = location.state?.totalPrice ?? 0;
-  const cartItems = location.state?.cartItems ?? [];
+  const { user } = useSession();
   const [clientSecret, setClientSecret] = useState("");
+  /** Montant en centimes, tel que le serveur l'a calculé depuis le panier. */
+  const [amountInCents, setAmountInCents] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const clearCart = useClearCart();
 
   useEffect(() => {
-    if (!totalPrice || totalPrice <= 0) return;
+    // Corps vide : le montant est relu en base à partir du panier de
+    // l'utilisateur connecté. Un prix envoyé par le client serait un prix
+    // choisi par le client.
+    apiFetch("/api/payment/create-intent", { method: "POST" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
 
-    apiFetch("/api/payment/create-intent", {
-      method: "POST",
-      body: JSON.stringify({ amount: totalPrice }),
-    })
-      .then((res) => res.json())
-      .then((data) => setClientSecret(data.clientSecret));
-  }, [totalPrice]);
+        if (!res.ok) {
+          setError(data?.message ?? "Le paiement n'a pas pu être préparé.");
+          return;
+        }
+
+        setClientSecret(data.clientSecret);
+        setAmountInCents(data.amount ?? 0);
+      })
+      .catch(() => setError("Impossible de contacter le serveur."));
+  }, []);
+
+  if (error) {
+    return (
+      <section className="payment-page">
+        <h1>Finaliser votre commande</h1>
+        <p>{error}</p>
+      </section>
+    );
+  }
 
   if (!clientSecret) {
     return <p>Chargement du paiement...</p>;
   }
+
+  const totalPrice = amountInCents / 100;
 
   const handlePaymentSuccess = async () => {
     if (!user?.id) {
@@ -45,14 +63,12 @@ function Payment() {
     <section className="payment-page">
       <h1>Finaliser votre commande</h1>
       <p>
-        Total à payer : <strong>{totalPrice} €</strong>
+        Total à payer : <strong>{totalPrice.toFixed(2)} €</strong>
       </p>
 
       <Elements stripe={stripePromise} options={{ clientSecret }}>
         <CheckoutForm
           totalPrice={totalPrice}
-          userId={user?.id ?? 0}
-          cartItems={cartItems}
           onSuccess={handlePaymentSuccess}
         />
       </Elements>

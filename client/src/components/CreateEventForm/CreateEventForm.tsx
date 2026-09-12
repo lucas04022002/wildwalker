@@ -1,12 +1,12 @@
 import { useState } from "react";
 import "./CreateEventForm.css";
-import { useAuthContext } from "../../context/AuthContext";
 import { apiFetch } from "../../hooks/apiFetch";
+import { useSession } from "../../hooks/useSession";
 import useSpaces from "../../hooks/useSpaces";
 import useTimeSlot from "../../hooks/useTimeSlot";
 
 export default function CreateEventForm() {
-  const user = useAuthContext();
+  const { user } = useSession();
   const spaces = useSpaces();
   const slot = useTimeSlot();
   const [participants, setParticipants] = useState<number>(0);
