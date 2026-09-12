@@ -13,7 +13,9 @@ server/public/assets :
   - sinon l'image est redimensionnée (largeur max 1600 px, ratio conservé,
     pas d'agrandissement) puis encodée en WebP qualité 82, method 6 ;
   - si le .webp obtenu dépasse 300 Ko, l'image est ré-encodée en qualité 70 ;
-  - l'original est supprimé après écriture du .webp.
+  - l'original est supprimé après écriture du .webp ;
+  - un fichier qui échoue est signalé et n'interrompt pas les suivants
+    (le script sort alors en code 1).
 
 Usage : python scripts/optimize-images.py
 """
@@ -82,6 +84,7 @@ def convert_one(src: Path) -> tuple[str, float, float, bool] | None:
 def main() -> int:
     rows: list[tuple[str, float, float, bool]] = []
     skipped: list[str] = []
+    failed: list[tuple[str, str]] = []
 
     for target_dir in TARGET_DIRS:
         if not target_dir.exists():
@@ -89,9 +92,18 @@ def main() -> int:
         for src in sorted(target_dir.rglob("*")):
             if not src.is_file() or src.suffix.lower() not in SOURCE_EXTS:
                 continue
-            result = convert_one(src)
+            rel = src.relative_to(REPO_ROOT).as_posix()
+            # Un fichier illisible (PNG tronqué, format exotique, verrou
+            # Windows) ne doit pas emporter la conversion des 200 autres :
+            # on le note et on continue. Le code de sortie signale l'échec.
+            try:
+                result = convert_one(src)
+            except Exception as err:  # noqa: BLE001 - on veut vraiment tout attraper
+                failed.append((rel, f"{type(err).__name__}: {err}"))
+                continue
+
             if result is None:
-                skipped.append(src.relative_to(REPO_ROOT).as_posix())
+                skipped.append(rel)
             else:
                 rows.append(result)
 
@@ -123,6 +135,12 @@ def main() -> int:
 
     if skipped:
         print(f"\nIgnorés (déjà convertis) : {len(skipped)} fichier(s).")
+
+    if failed:
+        print(f"\nÉchecs : {len(failed)} fichier(s) non convertis.", file=sys.stderr)
+        for rel, reason in failed:
+            print(f"  - {rel} : {reason}", file=sys.stderr)
+        return 1
 
     return 0
 
