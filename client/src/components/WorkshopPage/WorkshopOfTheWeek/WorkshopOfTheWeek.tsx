@@ -39,7 +39,7 @@ function WorkshopOfTheWeek({ workshop }: WorkshopOfTheWeekProps) {
           className="workshop-featured__img"
           style={{
             backgroundImage: workshop.url_image
-              ? `url(${import.meta.env.VITE_API_URL}${workshop.url_image})`
+              ? `url(${import.meta.env.VITE_API_URL ?? ""}${workshop.url_image})`
               : undefined,
           }}
         >

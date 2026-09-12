@@ -1,53 +1,155 @@
-// Load environment variables from .env file
+// Charge les variables d'environnement depuis .env
 import "dotenv/config";
 
 import fs from "node:fs";
 import path from "node:path";
 
-// Build the path to the schema SQL file
-const schema = path.join(__dirname, "../../server/database/schema.sql");
-
-// Get database connection details from .env file
-const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
-
-// Update the database schema
 import mysql from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
-const migrate = async () => {
-  try {
-    // Read the SQL statements from the schema file
-    const sql = fs.readFileSync(schema, "utf8");
+/**
+ * Runner de migrations.
+ *
+ * Règle d'or : on ne détruit JAMAIS rien. Pas de `DROP DATABASE`, pas de
+ * `DROP TABLE`, pas de `TRUNCATE`. Chaque fichier `.sql` du dossier est joué
+ * une seule fois, dans l'ordre lexical, puis noté dans `schema_migrations`.
+ */
 
-    // Create a specific connection to the database
-    const database = await mysql.createConnection({
-      host: DB_HOST,
-      port: DB_PORT as number | undefined,
-      user: DB_USER,
-      password: DB_PASSWORD,
-      multipleStatements: true, // Allow multiple SQL statements
-    });
+const MIGRATIONS_DIR = path.join(__dirname, "..", "database", "migrations");
 
-    // Drop the existing database if it exists
-    await database.query(`drop database if exists ${DB_NAME}`);
+const CREATE_MIGRATIONS_TABLE = `CREATE TABLE IF NOT EXISTS schema_migrations (
+  name VARCHAR(255) NOT NULL,
+  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`;
 
-    // Create a new database with the specified name
-    await database.query(`create database ${DB_NAME}`);
+// Garde-fou : un fichier qui contient une de ces formes n'est jamais exécuté.
+const FORBIDDEN = [
+  { pattern: /\bdrop\s+database\b/i, label: "DROP DATABASE" },
+  { pattern: /\bdrop\s+schema\b/i, label: "DROP SCHEMA" },
+  { pattern: /\bdrop\s+table\b/i, label: "DROP TABLE" },
+  { pattern: /\btruncate\b/i, label: "TRUNCATE" },
+];
 
-    // Switch to the newly created database
-    await database.query(`use ${DB_NAME}`);
-
-    // Execute the SQL statements to update the database schema
-    await database.query(sql);
-
-    // Close the database connection
-    database.end();
-
-    console.info(`${DB_NAME} updated from '${path.normalize(schema)}' 🆙`);
-  } catch (err) {
-    const { message, stack } = err as Error;
-    console.error("Error updating the database:", message, stack);
+const assertNotDestructive = (sql: string, label: string): void => {
+  for (const { pattern, label: forbidden } of FORBIDDEN) {
+    if (pattern.test(sql)) {
+      throw new Error(
+        `Migration refusée : ${label} contient ${forbidden}. Les migrations ne détruisent jamais de données.`,
+      );
+    }
   }
 };
 
-// Run the migration function
-migrate();
+/**
+ * Joue un fichier SQL dans une transaction, puis note son nom.
+ *
+ * Limite MySQL assumée : le DDL (`CREATE TABLE`, `ALTER TABLE`…) provoque un
+ * commit implicite. Le `ROLLBACK` ne défait donc pas un fichier de schéma
+ * à moitié appliqué ; il protège seulement le DML (le seed). C'est pourquoi
+ * le nom n'est inscrit dans `schema_migrations` qu'après succès complet :
+ * une migration interrompue est rejouée au prochain lancement, et les
+ * `CREATE TABLE IF NOT EXISTS` la rendent sûre à rejouer.
+ */
+const applyFileInTransaction = async (
+  pool: Pool,
+  sql: string,
+  name: string,
+  record: boolean,
+): Promise<void> => {
+  const connection: PoolConnection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    await connection.query(sql);
+
+    if (record) {
+      await connection.query(
+        "INSERT INTO schema_migrations (name, applied_at) VALUES (?, NOW())",
+        [name],
+      );
+    }
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    const { message } = err as Error;
+    throw new Error(`Échec de la migration ${name} : ${message}`);
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Applique les migrations non encore jouées du dossier `dir`.
+ * Retourne les noms des fichiers appliqués pendant cet appel.
+ */
+const runMigrations = async (pool: Pool, dir: string): Promise<string[]> => {
+  await pool.query(CREATE_MIGRATIONS_TABLE);
+
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT name FROM schema_migrations",
+  );
+  const already = new Set(rows.map((row) => String(row.name)));
+
+  const files = fs
+    .readdirSync(dir)
+    .filter((file) => file.toLowerCase().endsWith(".sql"))
+    .sort();
+
+  const applied: string[] = [];
+
+  for (const file of files) {
+    if (already.has(file)) continue;
+
+    const sql = fs.readFileSync(path.join(dir, file), "utf8");
+    assertNotDestructive(sql, file);
+
+    await applyFileInTransaction(pool, sql, file, true);
+    applied.push(file);
+  }
+
+  return applied;
+};
+
+/** Pool dédié au CLI : `multipleStatements` pour jouer un fichier d'un bloc. */
+const createMigrationPool = (): Pool =>
+  mysql.createPool({
+    host: process.env.DB_HOST,
+    port: Number.parseInt(process.env.DB_PORT ?? "3306", 10),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    multipleStatements: true,
+    connectionLimit: 1,
+  });
+
+const main = async (): Promise<void> => {
+  const pool = createMigrationPool();
+
+  try {
+    const applied = await runMigrations(pool, MIGRATIONS_DIR);
+
+    if (applied.length === 0) {
+      console.info("Base à jour, aucune migration à appliquer.");
+    } else {
+      console.info(`Migrations appliquées : ${applied.join(", ")}`);
+    }
+  } finally {
+    await pool.end();
+  }
+};
+
+if (require.main === module) {
+  main().catch((err: Error) => {
+    console.error(`Migration impossible : ${err.message}`);
+    process.exitCode = 1;
+  });
+}
+
+export {
+  runMigrations,
+  createMigrationPool,
+  assertNotDestructive,
+  MIGRATIONS_DIR,
+};

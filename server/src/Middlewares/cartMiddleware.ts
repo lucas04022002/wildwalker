@@ -2,11 +2,12 @@ import type { RequestHandler } from "express";
 import Joi from "joi";
 
 // Schéma pour la CRÉATION (POST)
+// `users_id` et `total_price` ne sont volontairement pas acceptés : le
+// propriétaire de la ligne vient du jeton, le prix est relu en base.
+// `stripUnknown` les retire s'ils sont envoyés.
 const addEventSchema = Joi.object({
-  users_id: Joi.number().integer().positive().required(),
   event_id: Joi.number().integer().positive().required(),
   quantity: Joi.number().integer().positive().required(),
-  total_price: Joi.number().min(0).required(),
   last_name: Joi.string()
     .pattern(/^[A-Za-zÀ-ÖØ-öø-ÿ\s'-]+$/)
     .min(2)
@@ -20,16 +21,16 @@ const addEventSchema = Joi.object({
   email: Joi.string().email().required(),
 });
 
-// Schéma pour la MISE À JOUR (PUT/PATCH)
+// Schéma pour la MISE À JOUR (PATCH)
+//
+// `quantity` est le SEUL champ modifiable, et il est obligatoire : un corps
+// vide, ou qui ne porte que `total_price`, est refusé. `total_price` a
+// disparu du schéma — le total est recalculé en base à partir du prix
+// unitaire, jamais dicté par le client. `stripUnknown` le retire s'il est
+// envoyé, et sans `quantity` valide la requête n'atteint pas le dépôt.
 const updateCartSchema = Joi.object({
-  quantity: Joi.number().integer().positive().optional(),
-  total_price: Joi.number().min(0).optional(),
-})
-  .min(1) // Au moins un des deux champs doit être fourni
-  .messages({
-    "object.min":
-      "Vous devez fournir au moins un champ à modifier (quantity ou total_price).",
-  });
+  quantity: Joi.number().integer().positive().required(),
+});
 
 // schéma pour la SUPPRESSION d'un item (delete)
 const deleteItemSchema = Joi.object({

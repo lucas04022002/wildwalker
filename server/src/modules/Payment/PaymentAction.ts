@@ -1,18 +1,36 @@
 import type { RequestHandler } from "express";
 import paymentRepository from "./PaymentRepository";
 
+/**
+ * POST /api/payment/create-intent
+ *
+ * Le montant vient du panier de l'utilisateur authentifié, lu en base. Tout
+ * montant envoyé dans le corps de la requête est ignoré.
+ */
 const createIntent: RequestHandler = async (req, res, next) => {
   try {
-    const { amount } = req.body;
-    console.log("Amount reçu :", amount);
+    const userId = req.user?.id;
 
-    if (!amount || amount <= 0) {
-      res.status(400).json({ message: "Montant invalide." });
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
       return;
     }
 
-    const clientSecret = await paymentRepository.createPaymentIntent(amount);
-    res.json({ clientSecret });
+    const amountInCents = await paymentRepository.amountForUser(userId);
+
+    if (amountInCents <= 0) {
+      res.status(400).json({ message: "Votre panier est vide." });
+      return;
+    }
+
+    // `userId` part en metadata : la réservation vérifiera plus tard que
+    // l'intention présentée est bien celle de cet utilisateur.
+    const clientSecret = await paymentRepository.createPaymentIntent(
+      amountInCents,
+      userId,
+    );
+
+    res.json({ clientSecret, amount: amountInCents });
   } catch (err) {
     next(err);
   }

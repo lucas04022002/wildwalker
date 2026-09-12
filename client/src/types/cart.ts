@@ -15,4 +15,10 @@ export type CartItem = {
   id_space: number;
   space_name: string;
   url_image: string;
+  /**
+   * Montant de la ligne en euros, calculé par le serveur (`amount.ts`).
+   * Le client ne le recalcule jamais : un « Local vide » se loue au mois,
+   * et `price_unit × quantity` sous-facturerait la location.
+   */
+  line_amount: number;
 };

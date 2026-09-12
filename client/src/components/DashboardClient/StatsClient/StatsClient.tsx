@@ -1,9 +1,9 @@
-import { useAuthContext } from "../../../context/AuthContext";
+import { useSession } from "../../../hooks/useSession";
 import useStatsClient from "../../../hooks/useStatsClient";
 import "./StatsClient.css";
 
 function StatsClient() {
-  const user = useAuthContext();
+  const { user } = useSession();
   const stats = useStatsClient(user?.id ?? 0);
 
   if (!stats) return null;

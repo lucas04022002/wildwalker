@@ -1,99 +1,96 @@
-// Load the express module to create a web application
-
-import express from "express";
-
-const app = express();
-
-// Configure it
-
-/* ************************************************************************* */
-
-// CORS Handling: Why is the current code present and do I need to define specific allowed origins for my project?
-
-// CORS (Cross-Origin Resource Sharing) is a security mechanism in web browsers that blocks requests from a different domain than the server.
-// You may find the following magic line in forums:
-
-// app.use(cors());
-
-// You should NOT do that: such code uses the `cors` module to allow all origins, which can pose security issues.
-// For this pedagogical template, the CORS code allows CLIENT_URL in development mode (when process.env.CLIENT_URL is defined).
-
-import cors from "cors";
-
-if (process.env.CLIENT_URL != null) {
-  app.use(cors({ origin: [process.env.CLIENT_URL] }));
-}
-
-// If you need to allow extra origins, you can add something like this:
-
-/*
-app.use(
-  cors({
-    origin: ["http://mysite.com", "http://another-domain.com"],
-  }),
-);
-*/
-
-// With ["http://mysite.com", "http://another-domain.com"]
-// to be replaced with an array of your trusted origins
-
-/* ************************************************************************* */
-
-// Request Parsing: Understanding the purpose of this part
-
-// Request parsing is necessary to extract data sent by the client in an HTTP request.
-// For example to access the body of a POST request.
-// The current code contains different parsing options as comments to demonstrate different ways of extracting data.
-
-// 1. `express.json()`: Parses requests with JSON data.
-// 2. `express.urlencoded()`: Parses requests with URL-encoded data.
-// 3. `express.text()`: Parses requests with raw text data.
-// 4. `express.raw()`: Parses requests with raw binary data.
-
-// Uncomment one or more of these options depending on the format of the data sent by your client:
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-// app.use(express.text());
-// app.use(express.raw());
-
-/* ************************************************************************* */
-
-// Import the API router
-import router from "./router";
-
-// Mount the API router under the "/api" endpoint
-app.use(router);
-
-/* ************************************************************************* */
-
-// Production-ready setup: What is it for?
-
-// The code includes sections to set up a production environment where the client and server are executed from the same processus.
-
-// What it's for:
-// - Serving client static files from the server, which is useful when building a single-page application with React.
-// - Redirecting unhandled requests (e.g., all requests not matching a defined API route) to the client's index.html. This allows the client to handle client-side routing.
-
 import fs from "node:fs";
 import path from "node:path";
 
-// Serve server resources
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import express, { type ErrorRequestHandler } from "express";
+import helmet from "helmet";
+import multer from "multer";
 
-const publicFolderPath = path.join(__dirname, "../../server/public");
+import { assertSameOrigin } from "./Middlewares/originMiddleware";
+import router from "./router";
+import { MAX_UPLOAD_BYTES, UnsupportedFileTypeError } from "./upload/upload";
+
+const app = express();
+
+/* ************************************************************************* */
+// En-têtes de sécurité
+/* ************************************************************************* */
+
+// `contentSecurityPolicy: false` pour l'instant : une CSP réelle demande de
+// lister les origines du client (Stripe, polices) et sera posée avec le
+// déploiement. Le reste de helmet (nosniff, frameguard, HSTS...) s'applique.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+/* ************************************************************************* */
+// CORS
+/* ************************************************************************* */
+
+// Une seule origine autorisée, celle du client, et `credentials: true` parce
+// que la session voyage désormais dans un cookie. `CLIENT_URL` est exigée au
+// démarrage (voir main.ts) : sans elle, aucune origine n'est acceptée.
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL ?? false,
+    credentials: true,
+  }),
+);
+
+/* ************************************************************************* */
+// Lecture de la requête
+/* ************************************************************************* */
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Garde d'origine sur toutes les écritures, avant le routeur : aucune route
+// non-GET ne peut être ajoutée sans en bénéficier.
+app.use(assertSameOrigin);
+
+/* ************************************************************************* */
+// API
+/* ************************************************************************* */
+
+app.use(router);
+
+// Une route d'API inconnue répond 404 en JSON, et n'est jamais servie par le
+// repli statique du client ci-dessous.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ message: "Route inconnue." });
+});
+
+/* ************************************************************************* */
+// Fichiers statiques (serveur puis client construit)
+/* ************************************************************************* */
+
+/**
+ * Racine du workspace `server`, quelle que soit la façon dont on tourne.
+ *
+ * En développement (tsx) `__dirname` vaut `server/src` ; une fois compilé il
+ * vaut `server/dist/src`. Un chemin relatif unique ne peut donc pas convenir
+ * aux deux : on remonte d'un cran de plus quand le dossier parent est `dist`.
+ * Sans ça, l'image Docker servait `server/server/public` — c'est-à-dire rien.
+ */
+const serverRoot =
+  path.basename(path.join(__dirname, "..")) === "dist"
+    ? path.join(__dirname, "..", "..")
+    : path.join(__dirname, "..");
+
+const publicFolderPath = path.join(serverRoot, "public");
 
 if (fs.existsSync(publicFolderPath)) {
   app.use(express.static(publicFolderPath));
 }
 
-// Serve client resources
-
-const clientBuildPath = path.join(__dirname, "../../client/dist");
+// En production le client construit est servi par le même processus : une
+// seule image, une seule origine, donc pas de CORS ni de cookie tiers.
+// Ce bloc est placé APRÈS le 404 JSON de `/api` : une route d'API inconnue
+// répond en JSON et ne reçoit jamais l'`index.html` du client.
+const clientBuildPath = path.join(serverRoot, "..", "client", "dist");
 
 if (fs.existsSync(clientBuildPath)) {
   app.use(express.static(clientBuildPath));
-
-  // Redirect unhandled requests to the client index file
 
   app.get("*", (_, res) => {
     res.sendFile("index.html", { root: clientBuildPath });
@@ -101,25 +98,80 @@ if (fs.existsSync(clientBuildPath)) {
 }
 
 /* ************************************************************************* */
+// Envois de fichiers refusés (avant la journalisation)
+/* ************************************************************************* */
 
-// Middleware for Error Logging
-// Important: Error-handling middleware should be defined last, after other app.use() and routes calls.
+/**
+ * Un fichier trop gros ou d'un type refusé est une erreur de l'appelant,
+ * pas une panne du serveur. Sans ce gestionnaire, multer laissait filer son
+ * erreur jusqu'au filet final : 500 « Erreur serveur. », et l'utilisateur
+ * qui envoie un PDF de 40 Mo n'apprenait ni quoi ni pourquoi.
+ *
+ * Placé AVANT `logErrors` : un refus attendu n'a pas à encombrer les
+ * journaux d'erreurs.
+ */
+const MULTER_MESSAGES: Record<string, string> = {
+  LIMIT_FILE_SIZE: `Fichier trop volumineux : ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))} Mo maximum.`,
+  LIMIT_FILE_COUNT: "Trop de fichiers envoyés.",
+  LIMIT_UNEXPECTED_FILE: "Champ de fichier inattendu.",
+  LIMIT_PART_COUNT: "Formulaire trop volumineux.",
+  LIMIT_FIELD_KEY: "Nom de champ trop long.",
+  LIMIT_FIELD_VALUE: "Valeur de champ trop longue.",
+  LIMIT_FIELD_COUNT: "Trop de champs dans le formulaire.",
+};
 
-import type { ErrorRequestHandler } from "express";
+const handleUploadErrors: ErrorRequestHandler = (err, _req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
 
-// Define a middleware function to log errors
-const logErrors: ErrorRequestHandler = (err, req, res, next) => {
-  // Log the error to the console for debugging purposes
-  console.error(err);
-  console.error("on req:", req.method, req.path);
+  if (err instanceof multer.MulterError) {
+    res.status(400).json({
+      message: MULTER_MESSAGES[err.code] ?? "Le fichier envoyé a été refusé.",
+    });
+    return;
+  }
 
-  // Pass the error to the next middleware in the stack
+  if (err instanceof UnsupportedFileTypeError) {
+    res.status(400).json({ message: err.message });
+    return;
+  }
+
   next(err);
 };
 
-// Mount the logErrors middleware globally
-app.use(logErrors);
+app.use(handleUploadErrors);
 
 /* ************************************************************************* */
+// Journalisation des erreurs (toujours en dernier)
+/* ************************************************************************* */
+
+const logErrors: ErrorRequestHandler = (err, req, res, next) => {
+  console.error(err);
+  console.error("on req:", req.method, req.path);
+
+  next(err);
+};
+
+app.use(logErrors);
+
+/**
+ * Dernier filet. Sans lui, Express répond avec la pile d'appel en clair hors
+ * production : chemins de fichiers, requêtes SQL et noms de colonnes offerts
+ * à qui provoque une erreur. Le détail reste dans les journaux du serveur.
+ */
+const handleErrors: ErrorRequestHandler = (err, _req, res, next) => {
+  // Réponse déjà partie (flux interrompu, en-têtes émis) : on ne peut plus
+  // rien écrire. On rend la main à Express, qui fermera la connexion — se
+  // contenter d'un `return` laissait la requête pendante jusqu'au timeout.
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(500).json({ message: "Erreur serveur." });
+};
+
+app.use(handleErrors);
 
 export default app;
+export { clientBuildPath, handleErrors, publicFolderPath, serverRoot };

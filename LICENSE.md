@@ -1,4 +1,4 @@
-Copyright (c) 2026   (hit Enter to use an empty string)
+Copyright (c) 2026 Aude Charrier, Nico Semenadisse, Brice Kutuk, Lucas Guilhot, Coline Rabemihoatra, Leo Fleury
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

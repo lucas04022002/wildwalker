@@ -3,7 +3,6 @@ import { useState } from "react";
 import type { Space } from "../../../../../types/space";
 import BookingForm from "../BookingForm/BookingForm";
 import "./SpaceModalContent.css";
-import { useAuthContext } from "../../../../../context/AuthContext";
 
 type SpaceModalContentProps = {
   spaces: Space[];
@@ -19,7 +18,6 @@ function SpaceModalContent({
   categoryName,
   onClose,
 }: SpaceModalContentProps) {
-  const user = useAuthContext();
   const [currentIndex, setCurrentIndex] = useState(0);
   // Bascule entre la vue "détails de l'espace" et le formulaire de réservation
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -60,7 +58,7 @@ function SpaceModalContent({
 
         <motion.img
           className="space-modal-image"
-          src={`${import.meta.env.VITE_API_URL}${currentSpace.url_image}`}
+          src={`${import.meta.env.VITE_API_URL ?? ""}${currentSpace.url_image}`}
           alt={currentSpace.space_name}
           animate={{
             scale: showBookingForm ? 1.05 : 1,
@@ -86,7 +84,6 @@ function SpaceModalContent({
               <BookingForm
                 space={currentSpace}
                 onBack={() => setShowBookingForm(false)}
-                userId={user?.id ?? 0}
               />
             </motion.div>
           ) : (

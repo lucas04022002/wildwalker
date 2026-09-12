@@ -7,7 +7,6 @@ type UserRow = {
   email: string;
   lastname: string;
   password: string;
-  fortgot_password: string;
   city: string | null;
   adress: string | null;
   role: string;
@@ -16,7 +15,7 @@ type UserRow = {
   signing_date: string;
 };
 
-type SafeUser = Omit<UserRow, "password" | "fortgot_password">;
+type SafeUser = Omit<UserRow, "password">;
 
 const SAFE_USER_FIELDS =
   "id, phone_number, email, lastname, city, adress, role, profile_image, firstname, signing_date";
@@ -48,14 +47,13 @@ const create = async (user: {
 }): Promise<SafeUser | null> => {
   const [result] = await databaseLeLocal.query<Result>(
     `INSERT INTO users
-      (phone_number, email, lastname, password, fortgot_password, city, adress, role, firstname)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'client', ?)`,
+      (phone_number, email, lastname, password, city, adress, role, firstname)
+     VALUES (?, ?, ?, ?, ?, ?, 'client', ?)`,
     [
       user.phone_number,
       user.email,
       user.lastname,
       user.passwordHash,
-      "", // fortgot_password : NOT NULL en base, vide par défaut, utilisé seulement pour la réinit. de mot de passe
       user.city ?? null,
       user.adress ?? null,
       user.firstname,

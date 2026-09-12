@@ -2,15 +2,9 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./Cart.css";
 import { Link } from "react-router";
-import { useAuthContext } from "../../context/AuthContext";
 import { apiFetch } from "../../hooks/apiFetch";
 import useCart from "../../hooks/useCart";
 import type { CartItem } from "../../types/cart";
-
-const PROMO_CODES: Record<string, number> = {
-  PROMO10: 10,
-  PROMO15: 15,
-};
 
 const formatHour = (hour: string) => {
   const [hours, minutes = "00"] = hour.split(":");
@@ -18,43 +12,21 @@ const formatHour = (hour: string) => {
 };
 
 function Cart() {
-  const user = useAuthContext();
-  const cart = useCart(user?.id ?? 0);
-  const [carts, setCarts] = useState<CartItem[]>(cart);
+  const { items, total, loading, refresh } = useCart();
+  const [carts, setCarts] = useState<CartItem[]>([]);
+  const [totalPrice, setTotalPrice] = useState(0);
   const [message, setMessage] = useState("");
-  const [promoCode, setPromoCode] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [promoMessage, setPromoMessage] = useState("");
 
-  const applyPromo = () => {
-    const code = promoCode.trim().toUpperCase();
-
-    if (PROMO_CODES[code]) {
-      const percentage = PROMO_CODES[code];
-      setDiscount(percentage);
-      setPromoMessage(`Code appliqué : -${percentage}%`);
-    } else {
-      setDiscount(0);
-      setPromoMessage("Code invalide");
-    }
-  };
-
-  const totalPrice = carts.reduce(
-    (total, item) => total + Number(item.price_unit) * item.quantity,
-    0,
-  );
-
-  const discountAmount = (totalPrice * discount) / 100;
-  const discountedTotal = totalPrice - discountAmount;
+  // Les montants viennent du serveur, jamais d'un calcul local : c'est lui
+  // qui fera foi au paiement, donc l'écran ne doit annoncer rien d'autre.
+  // Un panier vide efface l'affichage — l'ancienne garde `length > 0`
+  // laissait les lignes supprimées à l'écran après un rechargement.
   useEffect(() => {
-    if (cart.length > 0) {
-      setCarts(cart);
-    }
-  }, [cart]);
+    if (loading) return;
 
-  useEffect(() => {
-    console.log(carts);
-  }, [carts]);
+    setCarts(items);
+    setTotalPrice(total);
+  }, [items, total, loading]);
 
   const increaseQuantity = async (id: number) => {
     const item = carts.find((i) => i.id === id);
@@ -69,16 +41,9 @@ function Cart() {
         body: JSON.stringify({ quantity: newQuantity }),
       });
 
-      setCarts((prev) =>
-        prev.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                quantity: newQuantity,
-              }
-            : i,
-        ),
-      );
+      // Le montant de la ligne et le total sont recalculés par le serveur :
+      // on les relit plutôt que de les deviner.
+      await refresh();
     } catch (error) {
       console.error("Erreur augmentation quantité :", error);
     }
@@ -97,16 +62,7 @@ function Cart() {
         body: JSON.stringify({ quantity: newQuantity }),
       });
 
-      setCarts((prev) =>
-        prev.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                quantity: newQuantity,
-              }
-            : i,
-        ),
-      );
+      await refresh();
     } catch (error) {
       console.error("Erreur diminution quantité :", error);
     }
@@ -119,6 +75,7 @@ function Cart() {
       });
 
       setCarts((prev) => prev.filter((item) => item.id !== id));
+      await refresh();
       setMessage("Article supprimé");
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
@@ -143,7 +100,7 @@ function Cart() {
               src={
                 item.url_image.startsWith("http")
                   ? item.url_image
-                  : `${import.meta.env.VITE_API_URL}${item.url_image}`
+                  : `${import.meta.env.VITE_API_URL ?? ""}${item.url_image}`
               }
               alt={item.space_name}
               className="cart-item-image"
@@ -197,7 +154,7 @@ function Cart() {
                   </div>
 
                   <span className="cart-item-price">
-                    {(Number(item.price_unit) * item.quantity).toFixed(2)} €{" "}
+                    {Number(item.line_amount).toFixed(2)} €{" "}
                   </span>
                 </div>
               </div>
@@ -215,58 +172,14 @@ function Cart() {
             <span>{totalPrice.toFixed(2)} €</span>
           </div>
 
-          {discount > 0 && (
-            <div className="cart-summary-row cart-summary-discount">
-              <span>Remise -{discount}%</span>
-              <span>-{discountAmount.toFixed(2)} €</span>
-            </div>
-          )}
-
-          <div className="cart-summary-total">
+          <div className="cart-summary-total" data-testid="cart-total">
             <span>Total TTC</span>
-            <span>{discountedTotal.toFixed(2)} €</span>
+            <span>{totalPrice.toFixed(2)} €</span>
           </div>
 
-          <div className="cart-promo-section">
-            <label htmlFor="promo">Code promo</label>
-
-            <div className="cart-promo-field">
-              <input
-                id="promo"
-                type="text"
-                placeholder="Saisissez votre code..."
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && applyPromo()}
-              />
-              <button type="button" onClick={applyPromo}>
-                Appliquer
-              </button>
-            </div>
-
-            {promoMessage && (
-              <p
-                className={
-                  discount > 0 ? "cart-promo-success" : "cart-promo-error"
-                }
-              >
-                {promoMessage}
-              </p>
-            )}
-          </div>
-
-          <Link
-            to="/payment"
-            state={{
-              totalPrice: discountedTotal,
-              cartItems: carts.map((item) => ({
-                id_activity: item.id_activity,
-                quantity: item.quantity,
-                price_unit: item.price_unit * (1 - discount / 100),
-              })),
-              userId: user?.id,
-            }}
-          >
+          {/* Aucun montant ni panier transmis : la page de paiement demande
+              le total au serveur, qui le calcule depuis le panier en base. */}
+          <Link to="/payment">
             <button type="button" className="cart-payment-button">
               Procéder au paiement
             </button>

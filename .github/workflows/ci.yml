@@ -1,0 +1,277 @@
+name: CI
+
+# Trois niveaux, du moins cher au plus proche de la production :
+#   checks      — lint, types, tests unitaires, build (aucune infrastructure)
+#   integration — les tests qui exigent un vrai MySQL
+#   image       — l'image Docker est construite ET lancée, puis interrogée
+#
+# Le poste de développement n'a ni Docker ni MySQL : ce fichier est le seul
+# endroit où l'image et les migrations sont réellement exécutées. Il doit
+# donc échouer fort plutôt que de sauter une étape.
+
+on:
+  push:
+    branches: [refonte, main]
+  pull_request:
+    branches: [refonte, main]
+
+# Le jeton fourni aux jobs est en lecture seule : cette CI ne pousse rien,
+# n'ouvre aucune issue et ne publie aucune image. Sans cette ligne, le jeton
+# hérite des droits par défaut du dépôt, bien plus larges que nécessaire.
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  checks:
+    name: Lint, types, tests unitaires, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Installation
+        run: npm ci
+
+      - name: Aucun fichier .env versionné
+        run: "! git ls-files | grep -E '(^|/)\\.env($|\\.)' | grep -v '\\.env\\.sample$'"
+
+      - name: Aucun jeton journalisé
+        run: '! grep -rn "console.log(.*token" server/src'
+
+      - name: Biome
+        run: npx biome ci .
+
+      - name: Types (client et serveur)
+        run: npm run check-types --workspaces
+
+      - name: Tests unitaires du serveur
+        # Sans DB_HOST, les suites *.int.test.ts s'ignorent d'elles-mêmes :
+        # elles sont couvertes par le job `integration`.
+        run: npx jest --ci
+        working-directory: server
+
+      - name: Tests du client
+        run: npm run test --workspace=client
+
+      - name: Build des deux workspaces
+        run: npm run build --workspaces
+
+      - name: Le build produit bien ce que l'image copie
+        run: |
+          set -e
+          for f in client/dist/index.html \
+                   server/dist/src/main.js \
+                   server/dist/bin/migrate.js \
+                   server/dist/bin/seed.js \
+                   server/dist/database/seed.sql \
+                   server/dist/database/migrations/0001_init.sql \
+                   server/dist/database/migrations/0002_invoice_counter.sql; do
+            test -f "$f" || { echo "manquant : $f"; exit 1; }
+          done
+
+  integration:
+    name: Intégration (MySQL 8 réel)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: racine-de-test-ci
+          MYSQL_DATABASE: wildwalker
+          MYSQL_USER: wildwalker
+          MYSQL_PASSWORD: wildwalker
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uwildwalker -pwildwalker"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_USER: wildwalker
+      DB_PASSWORD: wildwalker
+      DB_NAME: wildwalker
+      APP_PORT: "3310"
+      CLIENT_URL: http://localhost:5173
+      # Valeur de test, jetable, sans aucun usage hors de cette CI.
+      JWT_SECRET: jwt-secret-de-test-ci-wildwalker-0123456789
+      STRIPE_SECRET_KEY: sk_test_valeur_factice_ci
+      ALLOW_SEED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Installation
+        run: npm ci
+
+      - name: Migrations
+        run: npm run db:migrate --workspace=server
+
+      - name: Migrations rejouées (elles doivent être sans effet)
+        run: npm run db:migrate --workspace=server
+
+      - name: Données de démonstration
+        run: npm run db:seed --workspace=server
+
+      - name: Tests d'intégration
+        # Toutes les suites `*.int.test.ts`, en série : elles partagent la
+        # même base et les mêmes tables de démonstration.
+        run: npx jest --ci --runInBand --testPathPattern "int\.test\.ts$"
+        working-directory: server
+
+  image:
+    name: Image Docker (construction et smoke test)
+    runs-on: ubuntu-latest
+    needs: [checks]
+
+    env:
+      APP_URL: http://127.0.0.1:3310
+      ADMIN_EMAIL: nina.richard@lelocal.fr
+      ADMIN_PASSWORD: demo-admin-2026
+      CLIENT_EMAIL: lucie.marie655@voila.fr
+      CLIENT_PASSWORD: demo-client-2026
+      ADMIN_ROUTE: /api/dashboard/admin/stats
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construction de l'image
+        run: |
+          docker build \
+            --build-arg VITE_API_URL="" \
+            --build-arg VITE_STRIPE_PUBLIC_KEY=pk_test_valeur_factice_ci \
+            -t wildwalker:ci .
+
+      - name: Réseau et base de données
+        run: |
+          docker network create wildwalker-ci
+          docker run -d --name wildwalker-mysql --network wildwalker-ci \
+            -e MYSQL_ROOT_PASSWORD=racine-de-test-ci \
+            -e MYSQL_DATABASE=wildwalker \
+            -e MYSQL_USER=wildwalker \
+            -e MYSQL_PASSWORD=wildwalker \
+            --health-cmd="mysqladmin ping -h 127.0.0.1 -uwildwalker -pwildwalker" \
+            --health-interval=5s --health-timeout=5s --health-retries=30 \
+            mysql:8
+
+      - name: Attente de MySQL
+        run: |
+          for i in $(seq 1 60); do
+            etat=$(docker inspect -f '{{.State.Health.Status}}' wildwalker-mysql)
+            [ "$etat" = "healthy" ] && exit 0
+            sleep 2
+          done
+          echo "MySQL n'est jamais devenu sain."
+          docker logs wildwalker-mysql
+          exit 1
+
+      - name: Démarrage du conteneur applicatif
+        # COOKIE_SECURE=0 : le smoke test parle en HTTP simple, sinon le cookie
+        # de session ne reviendrait jamais. Jamais posé en production.
+        run: |
+          docker run -d --name wildwalker-app --network wildwalker-ci \
+            -p 3310:3310 \
+            -e NODE_ENV=production \
+            -e COOKIE_SECURE=0 \
+            -e ALLOW_SEED=1 \
+            -e APP_PORT=3310 \
+            -e CLIENT_URL=http://localhost:3310 \
+            -e DB_HOST=wildwalker-mysql \
+            -e DB_PORT=3306 \
+            -e DB_USER=wildwalker \
+            -e DB_PASSWORD=wildwalker \
+            -e DB_NAME=wildwalker \
+            -e JWT_SECRET=jwt-secret-de-test-ci-wildwalker-0123456789 \
+            -e STRIPE_SECRET_KEY=sk_test_valeur_factice_ci \
+            wildwalker:ci
+
+      - name: L'application répond, base comprise
+        # La santé passe à 200 une fois les migrations jouées par le CMD.
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' "$APP_URL/api/health" || true)
+            if [ "$code" = "200" ]; then
+              cat /tmp/health.json
+              grep -q '"db":true' /tmp/health.json && exit 0
+            fi
+            sleep 1
+          done
+          echo "Pas de /api/health 200 avec db:true en 60 s."
+          exit 1
+
+      - name: Chargement des données de démonstration
+        run: docker exec wildwalker-app node dist/bin/seed.js
+
+      - name: Le client construit est bien servi
+        run: |
+          curl -sS "$APP_URL/" -o /tmp/index.html
+          grep -q '<div id="root"' /tmp/index.html
+
+      - name: Une route d'API inconnue reste du JSON
+        run: |
+          code=$(curl -s -o /tmp/404.json -w '%{http_code}' "$APP_URL/api/inexistante")
+          test "$code" = "404"
+          grep -q 'Route inconnue' /tmp/404.json
+
+      - name: Un admin de démo accède à une route admin
+        run: |
+          code=$(curl -s -o /tmp/login-admin.json -w '%{http_code}' \
+            -c /tmp/cookies-admin.txt \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" \
+            "$APP_URL/api/auth/login/admin")
+          test "$code" = "200" || { echo "login admin: $code"; cat /tmp/login-admin.json; exit 1; }
+          grep -q 'ww_session' /tmp/cookies-admin.txt || { echo "pas de cookie de session"; exit 1; }
+
+          code=$(curl -s -o /tmp/admin.json -w '%{http_code}' \
+            -b /tmp/cookies-admin.txt "$APP_URL$ADMIN_ROUTE")
+          test "$code" = "200" || { echo "$ADMIN_ROUTE avec un admin: $code"; cat /tmp/admin.json; exit 1; }
+
+      - name: Un client de démo est refusé sur la même route
+        run: |
+          code=$(curl -s -o /tmp/login-client.json -w '%{http_code}' \
+            -c /tmp/cookies-client.txt \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$CLIENT_EMAIL\",\"password\":\"$CLIENT_PASSWORD\"}" \
+            "$APP_URL/api/auth/login/client")
+          test "$code" = "200" || { echo "login client: $code"; cat /tmp/login-client.json; exit 1; }
+
+          code=$(curl -s -o /tmp/refus.json -w '%{http_code}' \
+            -b /tmp/cookies-client.txt "$APP_URL$ADMIN_ROUTE")
+          test "$code" = "403" || { echo "$ADMIN_ROUTE avec un client: $code (403 attendu)"; cat /tmp/refus.json; exit 1; }
+
+      - name: Sans session, la même route est refusée
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL$ADMIN_ROUTE")
+          test "$code" = "401" || { echo "$ADMIN_ROUTE anonyme: $code (401 attendu)"; exit 1; }
+
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: |
+          echo "===== application ====="
+          docker logs wildwalker-app || true
+          echo "===== mysql ====="
+          docker logs wildwalker-mysql || true
+
+      - name: Nettoyage
+        if: always()
+        run: |
+          docker rm -f wildwalker-app wildwalker-mysql || true
+          docker network rm wildwalker-ci || true

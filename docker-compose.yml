@@ -1,45 +1,77 @@
-version: "3.4"
+# Pile locale complète : l'application (image de production) et MySQL 8.
+#
+# Usage :
+#   cp .env.sample .env   # puis remplir JWT_SECRET
+#   docker compose up --build
+#   docker compose exec -e ALLOW_SEED=1 app node dist/bin/seed.js   # une fois
+#
+# L'application est alors sur http://localhost:3310 — client et API sur la
+# même origine, comme en production. Les migrations sont jouées au démarrage
+# du conteneur ; le seed reste une action explicite.
 
 services:
-  web:
-    build: .
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
-    ports:
-      - "3310:3310"
-      - "3000:3000"
+  app:
+    build:
+      context: .
+      args:
+        # Vide : le client appelle son propre hôte (URL relatives).
+        VITE_API_URL: ""
+        VITE_STRIPE_PUBLIC_KEY: "${VITE_STRIPE_PUBLIC_KEY:-}"
     environment:
+      NODE_ENV: production
+      # La pile locale parle en HTTP simple sur localhost : avec `Secure`,
+      # le navigateur garderait le cookie de session pour lui et personne ne
+      # pourrait se connecter. Uniquement ici — en production le cookie doit
+      # rester Secure, et le serveur avertit au démarrage si ce n'est pas
+      # le cas (server/src/main.ts).
+      COOKIE_SECURE: 0
       APP_PORT: 3310
-      APP_SECRET: 123456789
+      # Origine autorisée en CORS et par la garde anti-CSRF : ici la nôtre.
+      CLIENT_URL: "${CLIENT_URL:-http://localhost:3310}"
       DB_HOST: database
       DB_PORT: 3306
-      DB_USER: user
-      DB_PASSWORD: password
-      DB_NAME: js_template_fullstack
-      VITE_API_URL: "http://localhost:3310"
-    command: sh -c "npm run dev"
+      DB_USER: "${DB_USER:-wildwalker}"
+      DB_PASSWORD: "${DB_PASSWORD:-wildwalker}"
+      DB_NAME: "${DB_NAME:-wildwalker}"
+      # Pas de valeur par défaut : mieux vaut refuser de démarrer.
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET manquant — copiez .env.sample vers .env}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+    ports:
+      - "3310:3310"
+    volumes:
+      # Les fichiers envoyés par les utilisateurs survivent aux reconstructions.
+      - uploads:/app/server/public/uploads
     depends_on:
       database:
         condition: service_healthy
+    restart: unless-stopped
 
   database:
-    image: mysql/mysql-server:8.0
-    healthcheck:
-      test: [ "CMD", "mysqladmin" ,"ping", "-h", "localhost", "-uuser", "-ppassword" ] # Command to check health.
-      interval: 5s # Interval between health checks.
-      timeout: 5s # Timeout for each health checking.
-      retries: 20 # Hou many times retries.
-      start_period: 10s
-    volumes:
-      - ./database-setup.sh:/docker-entrypoint-initdb.d/setup.sh
-    #      - db-data:/var/lib/mysql
+    image: mysql:8
     environment:
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
-      # Password for root access
-      MYSQL_ROOT_PASSWORD: rootpassword
-    ports:
-      - target: 3306
-        published: 3306
-        protocol: tcp
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-rootwildwalker}"
+      MYSQL_DATABASE: "${DB_NAME:-wildwalker}"
+      MYSQL_USER: "${DB_USER:-wildwalker}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-wildwalker}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-u${DB_USER:-wildwalker}",
+          "-p${DB_PASSWORD:-wildwalker}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    volumes:
+      - db-data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  db-data:

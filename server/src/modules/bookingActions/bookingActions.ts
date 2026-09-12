@@ -1,9 +1,19 @@
 import type { RequestHandler } from "express";
+import type { PoolConnection } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
+import type { RetrievedIntent } from "../Payment/PaymentRepository";
+import paymentRepository from "../Payment/PaymentRepository";
+import { monthsBetween } from "../Payment/amount";
 import activityRepository from "../activity/activityRepository";
 import spaceRepository from "../space/spaceRepository";
-import bookingRepository from "./bookingRepository";
+import timeSlotRepository from "../timeSlot/timeSlotRepository";
+import bookingRepository, { CapacityExceededError } from "./bookingRepository";
 
+/**
+ * Le corps de la requête ne porte que des identifiants et des quantités.
+ * Ni l'utilisateur (il vient du jeton) ni les prix (relus en base) ne sont
+ * acceptés du client.
+ */
 type BookingPayload = {
   space_id: number;
   time_slot_id: number | null;
@@ -11,15 +21,136 @@ type BookingPayload = {
   end_date: string;
   seats: number | null;
   months: number | null;
-  users_id: number;
-  total_price: number;
-  name?: string;
-  email?: string;
-  effective_price: number;
 };
 
 // Créneau horaire utilisé par défaut quand aucun n'est fourni (ex: pour les "Local vide", qui n'ont pas vraiment de créneau mais en ont besoin pour être stockés dans la table `activity`)
 const DEFAULT_TIME_SLOT_ID = 4;
+
+/** Majoration du créneau « Journée », qui couvre matin et après-midi. */
+const FULL_DAY_MULTIPLIER = 1.75;
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/** Prix unitaire effectif, calculé depuis l'espace et le créneau lus en base. */
+const effectivePriceFor = async (
+  connection: PoolConnection,
+  spacePriceUnit: number | string,
+  timeSlotId: number,
+  isLocal: boolean,
+): Promise<number> => {
+  const basePrice = Number(spacePriceUnit);
+
+  if (isLocal) {
+    return round2(basePrice);
+  }
+
+  const slot = await timeSlotRepository.readForBooking(connection, timeSlotId);
+  const isFullDay = slot?.slot === "Journée";
+
+  return round2(basePrice * (isFullDay ? FULL_DAY_MULTIPLIER : 1));
+};
+
+/** Réponse unique en cas de paiement non prouvé : rien n'est détaillé. */
+const PAYMENT_NOT_CONFIRMED = "Paiement non confirmé";
+
+/**
+ * POST /api/booking
+ * Transforme le panier de l'utilisateur connecté en réservations.
+ *
+ * Body : `{ paymentIntentId }` — et rien d'autre. L'utilisateur vient du
+ * jeton, les prix sont relus en base.
+ *
+ * La route exigeait auparavant la seule bonne foi du navigateur : un `curl`
+ * muni d'un cookie de session valide réservait sans payer. Le serveur relit
+ * désormais l'intention CHEZ STRIPE et la confronte au panier :
+ *
+ *   - statut `succeeded` (l'argent est arrivé) ;
+ *   - montant exactement égal au total du panier, en centimes ;
+ *   - `metadata.userId`, posé à la création de l'intention, égal à
+ *     l'utilisateur connecté — on ne présente pas le paiement d'un autre.
+ *
+ * Tout écart répond 402, sans dire lequel.
+ */
+const create: RequestHandler = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
+    const paymentIntentId = req.body?.paymentIntentId;
+
+    if (typeof paymentIntentId !== "string" || paymentIntentId.trim() === "") {
+      res
+        .status(400)
+        .json({ message: "Référence de paiement manquante ou invalide." });
+      return;
+    }
+
+    // Montant attendu, lu en base AVANT toute écriture : c'est lui qui sert
+    // de référence, jamais un montant envoyé par le client.
+    const expectedAmount = await paymentRepository.amountForUser(userId);
+
+    if (expectedAmount <= 0) {
+      res.status(400).json({ message: "Votre panier est vide." });
+      return;
+    }
+
+    let intent: RetrievedIntent | null = null;
+
+    try {
+      intent = await paymentRepository.retrievePaymentIntent(
+        paymentIntentId.trim(),
+      );
+    } catch {
+      // Référence inconnue, clé invalide, Stripe injoignable : dans le doute,
+      // on ne réserve pas.
+      res.status(402).json({ message: PAYMENT_NOT_CONFIRMED });
+      return;
+    }
+
+    const intentUserId = intent?.metadata?.userId;
+
+    const proven =
+      intent != null &&
+      intent.status === "succeeded" &&
+      Number(intent.amount) === expectedAmount &&
+      // Les intentions créées avant l'ajout de la metadata n'en portent pas :
+      // on ne rejette pas ce qu'on ne peut pas vérifier, le montant et le
+      // statut restent contrôlés.
+      (intentUserId == null ||
+        intentUserId === "" ||
+        Number(intentUserId) === userId);
+
+    if (!proven) {
+      res.status(402).json({ message: PAYMENT_NOT_CONFIRMED });
+      return;
+    }
+
+    const created = await bookingRepository.createFromCart(userId);
+
+    if (created === 0) {
+      res.status(400).json({ message: "Votre panier est vide." });
+      return;
+    }
+
+    res.status(201).json({ created });
+  } catch (err) {
+    // Capacité dépassée entre la constitution du panier et le paiement :
+    // un refus métier (409), pas une panne (500).
+    if (err instanceof CapacityExceededError) {
+      res.status(err.status).json({
+        message: err.message,
+        available: err.available,
+      });
+      return;
+    }
+
+    next(err);
+  }
+};
 
 /**
  * POST /api/bookings
@@ -32,20 +163,18 @@ const DEFAULT_TIME_SLOT_ID = 4;
  *
  * Toute l'opération est faite dans une transaction SQL avec verrouillage de la ligne `space` (FOR UPDATE) afin d'éviter les race conditions si deux utilisateurs réservent en même temps (double-booking).
  */
-const create: RequestHandler = async (req, res, next) => {
-  try {
-    const { userId, cartItems } = req.body;
-    await bookingRepository.create(userId, cartItems);
-    res.sendStatus(201);
-  } catch (err) {
-    next(err);
-  }
-};
 const add: RequestHandler = async (req, res, next) => {
+  const userId = req.user?.id;
+
+  if (userId == null) {
+    res.status(401).json({ message: "Veuillez vous connecter." });
+    return;
+  }
+
   const body = req.body as BookingPayload;
 
   // Validation basique des champs obligatoires
-  if (!body.space_id || !body.start_date || !body.end_date || !body.users_id) {
+  if (!body.space_id || !body.start_date || !body.end_date) {
     res.status(400).json({ message: "Champs requis manquants" });
     return;
   }
@@ -78,8 +207,26 @@ const add: RequestHandler = async (req, res, next) => {
     const isOpenSpace = space.space_category.toLowerCase().includes("open");
     const isLocal = space.space_category === "Local vide";
 
+    // Prix relus en base : le client n'a pas voix au chapitre.
+    const effectivePrice = await effectivePriceFor(
+      connection,
+      space.price_unit,
+      effectiveTimeSlotId,
+      isLocal,
+    );
+
     // --- Branche 1 : "Local vide" (réservation sur une période) ---
     if (isLocal) {
+      const months = monthsBetween(body.start_date, body.end_date);
+
+      if (months < 1) {
+        await connection.rollback();
+        res.status(400).json({
+          message: "Un local se réserve pour un mois complet au minimum",
+        });
+        return;
+      }
+
       // Vérifie qu'aucune réservation existante ne chevauche la période demandée
       const overlapping = await spaceRepository.hasOverlappingDateRange(
         connection,
@@ -102,7 +249,7 @@ const add: RequestHandler = async (req, res, next) => {
         spaceId: body.space_id,
         startDate: body.start_date,
         endDate: body.end_date,
-        priceUnit: space.price_unit,
+        priceUnit: effectivePrice,
         urlImage: space.url_image,
       });
 
@@ -111,9 +258,9 @@ const add: RequestHandler = async (req, res, next) => {
  VALUES (?, ?, ?, ?, ?)`,
         [
           quantity,
-          body.total_price,
-          body.effective_price,
-          body.users_id,
+          round2(effectivePrice * months),
+          effectivePrice,
+          userId,
           activity.id,
         ],
       );
@@ -148,20 +295,14 @@ const add: RequestHandler = async (req, res, next) => {
         spaceId: body.space_id,
         startDate: body.start_date,
         endDate: body.end_date,
-        priceUnit: space.price_unit,
+        priceUnit: effectivePrice,
         urlImage: space.url_image,
       });
 
       const [result] = await connection.query(
         `INSERT INTO cart (quantity, total_price, price_unit, users_id, id_activity)
  VALUES (?, ?, ?, ?, ?)`,
-        [
-          quantity,
-          body.total_price,
-          body.effective_price,
-          body.users_id,
-          activity.id,
-        ],
+        [quantity, effectivePrice, effectivePrice, userId, activity.id],
       );
 
       await connection.commit();
@@ -178,7 +319,7 @@ const add: RequestHandler = async (req, res, next) => {
       spaceId: body.space_id,
       startDate: body.start_date,
       endDate: body.end_date,
-      priceUnit: space.price_unit,
+      priceUnit: effectivePrice,
       urlImage: space.url_image,
     });
 
@@ -209,9 +350,9 @@ const add: RequestHandler = async (req, res, next) => {
  VALUES (?, ?, ?, ?, ?)`,
       [
         quantity,
-        body.total_price,
-        body.effective_price,
-        body.users_id,
+        round2(effectivePrice * quantity),
+        effectivePrice,
+        userId,
         activity.id,
       ],
     );

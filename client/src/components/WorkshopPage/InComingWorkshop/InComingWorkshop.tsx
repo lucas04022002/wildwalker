@@ -33,7 +33,7 @@ function InComingWorkshop({ workshop }: WorkshopProps) {
         className="incoming-workshop__top"
         style={{
           backgroundImage: workshop.url_image
-            ? `url(${import.meta.env.VITE_API_URL}${workshop.url_image})`
+            ? `url(${import.meta.env.VITE_API_URL ?? ""}${workshop.url_image})`
             : undefined,
         }}
       >

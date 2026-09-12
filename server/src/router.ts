@@ -1,41 +1,56 @@
 import express from "express";
+
+import authMiddleware from "./Middlewares/authMiddleware";
+import cartMiddleware from "./Middlewares/cartMiddleware";
+import eventMiddleware from "./Middlewares/eventMiddleware";
+import { loginLimiter, registerLimiter } from "./Middlewares/rateLimit";
+import authActions from "./modules/Authentification/AuthentificationAction";
+import paymentActions from "./modules/Payment/PaymentAction";
+import activityActions from "./modules/activity/activityActions";
+import bookingActions from "./modules/bookingActions/bookingActions";
 import cartActions from "./modules/cart/cartAction";
+import createEventFormAction from "./modules/createEventForm/createEventFormAction";
+import dasboardAdminActions from "./modules/dashboardAdmin/dashboardAdminActions";
+import dashboardClientActions from "./modules/dashboardClient/dashboardClientActions";
+import eventActions from "./modules/event/eventActions";
+import healthActions from "./modules/health/healthActions";
+import spaceActions from "./modules/space/spaceActions";
+import timeSlotActions from "./modules/timeSlot/timeSlotActions";
+import { upload } from "./upload/upload";
 
 const router = express.Router();
 
-import authMiddleware from "./Middlewares/authMiddleware";
-import authActions from "./modules/Authentification/AuthentificationAction";
+/* ************************************************************************* */
+// Santé (publique)
+/* ************************************************************************* */
+
+// Première route du routeur : elle doit répondre même si tout le reste est
+// en peine. Utilisée par le HEALTHCHECK du conteneur et par la CI.
+router.get("/api/health", healthActions.check);
 
 /* ************************************************************************* */
 // Auth routes (publiques)
 /* ************************************************************************* */
-router.post("/api/auth/register", authActions.register);
-router.post("/api/auth/login/client", authActions.loginClient);
-router.post("/api/auth/login/admin", authActions.loginAdmin);
+router.post("/api/auth/register", registerLimiter, authActions.register);
+router.post("/api/auth/login/client", loginLimiter, authActions.loginClient);
+router.post("/api/auth/login/admin", loginLimiter, authActions.loginAdmin);
+router.post("/api/auth/logout", authActions.logout);
 router.get("/api/auth/me", authMiddleware.requireAuth, authActions.me);
 
 /* ************************************************************************* */
 // Time slots (public)
 /* ************************************************************************* */
-import timeSlotActions from "./modules/timeSlot/timeSlotActions";
-
 router.get("/api/timeslots", timeSlotActions.browse);
 
 /* ************************************************************************* */
 // Spaces (public)
 /* ************************************************************************* */
-// Define space-related routes
-import spaceActions from "./modules/space/spaceActions";
-
 router.get("/api/spaces", spaceActions.browse);
 router.get("/api/spaces/:id/availability", spaceActions.readAvailability);
 
 /* ************************************************************************* */
 // Events (public)
 /* ************************************************************************* */
-import eventMiddleware from "./Middlewares/eventMiddleware";
-import eventActions from "./modules/event/eventActions";
-
 router.get("/api/events", eventActions.browseUpcomingEvents);
 router.get("/api/events/participants", eventActions.browseParticipantsToEvent);
 router.get(
@@ -56,7 +71,6 @@ router.post(
 /* ************************************************************************* */
 // Dashboard Client (protégé client)
 /* ************************************************************************* */
-import dashboardClientActions from "./modules/dashboardClient/dashboardClientActions";
 
 // Invoice
 router.get(
@@ -76,7 +90,10 @@ router.get(
 router.post(
   "/api/dashboard/client/event-requests",
   authMiddleware.requireAuth,
+  // `upload` d'abord : sans lui le corps multipart n'est pas encore lu, et
+  // le schéma validerait un objet vide.
   upload.single("image"),
+  eventMiddleware.validateEventRequest,
   dashboardClientActions.addEventRequest,
 );
 // *************************************************************************
@@ -127,7 +144,6 @@ router.post(
 /* ************************************************************************* */
 // Dashboard Admin (protégé admin)
 /* ************************************************************************* */
-import dasboardAdminActions from "./modules/dashboardAdmin/dashboardAdminActions";
 
 router.get(
   "/api/dashboard/admin/stats",
@@ -167,9 +183,9 @@ router.patch(
 /* ************************************************************************* */
 // Panier (protégé client)
 /* ************************************************************************* */
-import cartMiddleware from "./Middlewares/cartMiddleware";
 
-router.get("/api/cart/:userId", authMiddleware.requireAuth, cartActions.browse);
+// Le panier est celui du jeton : plus de `:userId` dans l'URL.
+router.get("/api/cart", authMiddleware.requireAuth, cartActions.browse);
 
 // add an event into cart
 router.post(
@@ -195,18 +211,9 @@ router.delete(
   cartActions.destroy,
 );
 
-// clear the cart of a user
-router.delete(
-  "/api/cart/user/:userId",
-  authMiddleware.requireAuth,
-  cartActions.destroyAll,
-);
-
 /* ************************************************************************* */
 // Create Event (protégé admin)
 /* ************************************************************************* */
-import { upload } from "../public/upload/upload";
-import createEventFormAction from "./modules/createEventForm/createEventFormAction";
 
 router.get(
   "/api/createEvent",
@@ -223,7 +230,6 @@ router.post(
 /* ************************************************************************* */
 // Payment (protégé client)
 /* ************************************************************************* */
-import paymentActions from "./modules/Payment/PaymentAction";
 
 router.post(
   "/api/payment/create-intent",
@@ -233,8 +239,7 @@ router.post(
 
 /* ************************************************************************* */
 // Define booking-related routes
-
-import bookingActions from "./modules/bookingActions/bookingActions";
+/* ************************************************************************* */
 
 // insert activity booked into cart table and activity table
 router.post("/api/bookings", authMiddleware.requireAuth, bookingActions.add);
@@ -245,8 +250,6 @@ router.post("/api/booking", authMiddleware.requireAuth, bookingActions.create);
 /* ************************************************************************* */
 // Workshop
 /* ************************************************************************* */
-
-import activityActions from "./modules/activity/activityActions";
 
 router.get("/api/activity", activityActions.browse);
 

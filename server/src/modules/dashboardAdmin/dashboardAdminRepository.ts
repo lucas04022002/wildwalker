@@ -1,5 +1,6 @@
 import databaseClient from "../../../database/client";
 import type { Rows } from "../../../database/client";
+import billingRepository from "../shared/billingRepository";
 
 type Booking = {
   id: number;
@@ -222,29 +223,46 @@ class DashboardAdminRepository {
     ]);
   }
 
+  /**
+   * Le numéro de facture est servi par un compteur verrouillé le temps
+   * d'une transaction (`billingRepository`) : il faut donc une connexion
+   * dédiée, pas le pool. Avec le pool, l'incrément et la lecture pouvaient
+   * partir sur deux connexions distinctes, et deux approbations simultanées
+   * émettaient le même numéro.
+   */
   async createBookingForRequest(activityId: number, userId: number) {
     const year = new Date().getFullYear();
+    const connection = await databaseClient.getConnection();
 
-    const [priceRows] = await databaseClient.query<Rows>(
-      `SELECT s.price_unit FROM activity a 
-     JOIN space s ON a.space_id = s.id 
+    try {
+      await connection.beginTransaction();
+
+      const [priceRows] = await connection.query<Rows>(
+        `SELECT s.price_unit FROM activity a
+     JOIN space s ON a.space_id = s.id
      WHERE a.id = ?`,
-      [activityId],
-    );
-    const priceUnit = (priceRows[0] as { price_unit: number }).price_unit;
+        [activityId],
+      );
+      const priceUnit = (priceRows[0] as { price_unit: number }).price_unit;
 
-    const [rows] = await databaseClient.query<Rows>(
-      "SELECT COUNT(*) as count FROM booking WHERE bills_number LIKE ?",
-      [`${year}-%`],
-    );
-    const count = (rows as { count: number }[])[0].count;
-    const billsNumber = `${year}-${Number(count) + 1}`;
+      const billsNumber = await billingRepository.nextBillsNumber(
+        connection,
+        year,
+      );
 
-    await databaseClient.query(
-      `INSERT INTO booking (users_id, bills_number, quantity, total_price, id_activity, payment_status)
+      await connection.query(
+        `INSERT INTO booking (users_id, bills_number, quantity, total_price, id_activity, payment_status)
      VALUES (?, ?, 1, ?, ?, 'pending')`,
-      [userId, billsNumber, priceUnit, activityId],
-    );
+        [userId, billsNumber, priceUnit, activityId],
+      );
+
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
   }
 
   async getEventRequest(activityId: number) {

@@ -1,8 +1,10 @@
 import ReactDOM from "react-dom/client";
+import type { RouteObject } from "react-router";
 import { RouterProvider, createBrowserRouter } from "react-router";
 import App from "./App";
 import Confirmation from "./components/Confirmation/Confirmation";
-import { AuthProvider } from "./context/AuthContext";
+import RequireRole from "./components/RequireRole";
+import { SessionProvider } from "./context/SessionProvider";
 
 import DashboardAdminPage from "./pages/DashboardAdminPage/DashboardAdminPage";
 import DashboardClientPage from "./pages/DashboardClientPage/DashboardClientPage";
@@ -16,11 +18,18 @@ import WorkshopPage from "./pages/WorkshopPage/WorkshopPage";
 import Cart from "./pages/cart/Cart";
 import SignIn from "./pages/signIn/SignIn";
 
-// Router
-const router = createBrowserRouter([
+/**
+ * Table des routes, exportée pour que les tests puissent vérifier que les
+ * pages protégées le sont réellement, sans monter toute l'application.
+ */
+export const routes: RouteObject[] = [
   {
     path: "/invoice/:bookingId",
-    element: <InvoicePage />,
+    element: (
+      <RequireRole requiredRole="client">
+        <InvoicePage />
+      </RequireRole>
+    ),
   },
   {
     element: <App />,
@@ -39,15 +48,27 @@ const router = createBrowserRouter([
       },
       {
         path: "/dashboard-client",
-        element: <DashboardClientPage />,
+        element: (
+          <RequireRole requiredRole="client">
+            <DashboardClientPage />
+          </RequireRole>
+        ),
       },
       {
         path: "/cart",
-        element: <Cart />,
+        element: (
+          <RequireRole requiredRole="client">
+            <Cart />
+          </RequireRole>
+        ),
       },
       {
         path: "/dashboard-admin",
-        element: <DashboardAdminPage />,
+        element: (
+          <RequireRole requiredRole="admin">
+            <DashboardAdminPage />
+          </RequireRole>
+        ),
       },
       {
         path: "/workshop-page",
@@ -55,11 +76,19 @@ const router = createBrowserRouter([
       },
       {
         path: "/payment",
-        element: <Payment />,
+        element: (
+          <RequireRole requiredRole="client">
+            <Payment />
+          </RequireRole>
+        ),
       },
       {
         path: "/confirmation",
-        element: <Confirmation />,
+        element: (
+          <RequireRole requiredRole="client">
+            <Confirmation />
+          </RequireRole>
+        ),
       },
       {
         path: "/log-in",
@@ -71,14 +100,16 @@ const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+const router = createBrowserRouter(routes);
 
 const rootElement = document.getElementById("root");
 
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(
-    <AuthProvider>
+    <SessionProvider>
       <RouterProvider router={router} />
-    </AuthProvider>,
+    </SessionProvider>,
   );
 }
