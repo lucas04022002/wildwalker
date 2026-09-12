@@ -1,13 +1,41 @@
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
-import { type CartPriceRow, lineAmountInEuros } from "../Payment/amount";
+import {
+  type CartPriceRow,
+  MONTHLY_CATEGORY,
+  lineAmountInEuros,
+} from "../Payment/amount";
 import billingRepository from "../shared/billingRepository";
+import spaceRepository from "../space/spaceRepository";
 
 type CartLine = CartPriceRow & {
   id: number;
   quantity: number;
   id_activity: number;
+  space_id: number;
+  time_slot_id: number;
+  capacity: number;
 };
+
+/**
+ * Panier devenu infaisable entre sa constitution et le paiement : la place
+ * a été prise entre-temps. Porte un `status` pour que l'action réponde 409
+ * plutôt que 500 — ce n'est pas une panne, c'est un refus métier.
+ */
+class CapacityExceededError extends Error {
+  readonly status = 409;
+  readonly available: number;
+
+  constructor(available: number) {
+    super(
+      available > 0
+        ? `Plus que ${available} place${available > 1 ? "s" : ""} disponible${available > 1 ? "s" : ""} pour ce créneau`
+        : "Plus aucune place disponible pour ce créneau",
+    );
+    this.name = "CapacityExceededError";
+    this.available = available;
+  }
+}
 
 /**
  * Transforme le panier d'un utilisateur en réservations.
@@ -29,7 +57,10 @@ const readCartForUpdate = async (
             c.id_activity,
             a.start_date,
             a.end_date,
-            s.space_category
+            a.space_id,
+            a.time_slot_id,
+            s.space_category,
+            s.capacity
        FROM cart c
        JOIN activity a ON a.id = c.id_activity
        JOIN space s ON s.id = a.space_id
@@ -39,6 +70,38 @@ const readCartForUpdate = async (
   );
 
   return rows as CartLine[];
+};
+
+/**
+ * Refuse la ligne si la capacité de l'espace est dépassée.
+ *
+ * `countBookedSeats` compte le panier ET les réservations : la ligne en
+ * cours de conversion s'y compte elle-même, on la retire donc du total. Un
+ * « Local vide » se réserve par période, pas par place : la règle des
+ * chevauchements le couvre ailleurs, la capacité ne s'y applique pas.
+ */
+const assertStillAvailable = async (
+  connection: PoolConnection,
+  line: CartLine,
+  quantity: number,
+): Promise<void> => {
+  if (line.space_category === MONTHLY_CATEGORY) return;
+  if (line.space_id == null || line.start_date == null) return;
+
+  const bookingDate = new Date(line.start_date).toISOString().slice(0, 10);
+
+  const booked = await spaceRepository.countBookedSeats(
+    connection,
+    Number(line.space_id),
+    bookingDate,
+    Number(line.time_slot_id),
+  );
+
+  const available = Math.max(Number(line.capacity) - (booked - quantity), 0);
+
+  if (quantity > available) {
+    throw new CapacityExceededError(available);
+  }
 };
 
 /**
@@ -62,6 +125,12 @@ const createFromCart = async (userId: number): Promise<number> => {
 
     for (const line of lines) {
       const quantity = Number(line.quantity ?? 0);
+
+      // Dernier contrôle de capacité, à l'instant de l'écriture. Le panier
+      // a pu être constitué il y a une heure : la place n'est réservée qu'au
+      // moment où la réservation est écrite, pas avant.
+      await assertStillAvailable(connection, line, quantity);
+
       // Même règle de prix que le paiement : quantité, et durée en mois pour
       // les locaux loués au mois. Un écart ici facturerait autre chose que ce
       // que Stripe a encaissé.
@@ -92,4 +161,5 @@ const createFromCart = async (userId: number): Promise<number> => {
 };
 
 export default { createFromCart };
+export { CapacityExceededError };
 export type { CartLine };

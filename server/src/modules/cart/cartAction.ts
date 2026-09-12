@@ -1,7 +1,8 @@
 import type { RequestHandler } from "express";
 import databaseLeLocal from "../../../database/client";
-import { lineAmountInEuros } from "../Payment/amount";
+import { type CartPriceRow, lineAmountInEuros } from "../Payment/amount";
 import eventRepository from "../event/eventRepository";
+import spaceRepository from "../space/spaceRepository";
 import cartRepository from "./cartRepository";
 
 /**
@@ -14,8 +15,18 @@ import cartRepository from "./cartRepository";
 const currentUserId = (req: Parameters<RequestHandler>[0]): number | null =>
   req.user?.id ?? null;
 
-// Browse — GET /api/cart
-// Retourne tous les articles du panier de l'utilisateur connecté
+/** Arrondi au centime : les montants affichés sont des euros. */
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/**
+ * Browse — GET /api/cart
+ *
+ * Retourne `{ items, total }` pour le panier de l'utilisateur connecté.
+ * Chaque ligne porte son `line_amount` en euros, calculé ici par la MÊME
+ * fonction que le paiement (`amount.ts`). Le client ne multiplie plus rien :
+ * un « Local vide » se loue au mois, et `price_unit × quantity` sous-facturait
+ * la location d'un facteur égal au nombre de mois.
+ */
 const browse: RequestHandler = async (req, res, next) => {
   try {
     const userId = currentUserId(req);
@@ -25,8 +36,18 @@ const browse: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    const items = await cartRepository.readAll(userId);
-    res.json(items);
+    const rows = await cartRepository.readAll(userId);
+
+    const items = rows.map((row) => ({
+      ...row,
+      line_amount: lineAmountInEuros(row as CartPriceRow),
+    }));
+
+    const total = round2(
+      items.reduce((sum, item) => sum + item.line_amount, 0),
+    );
+
+    res.json({ items, total });
   } catch (err) {
     next(err);
   }
@@ -109,34 +130,125 @@ const addEvent: RequestHandler = async (req, res, next) => {
   }
 };
 
-// Edit — PATCH /api/cart/:id
-// Body attendu : { quantity }
+/**
+ * Edit — PATCH /api/cart/:id
+ * Body attendu : { quantity } — un entier strictement positif, et rien d'autre.
+ *
+ * Deux contrôles, dans cet ordre :
+ *
+ * 1. la quantité est revalidée ici, en plus du schéma Joi. Le contrôle du
+ *    middleware peut être contourné par une route ajoutée sans lui ; celui-ci
+ *    ne peut pas l'être, il est dans l'action elle-même.
+ * 2. la capacité est revérifiée sous verrou. Un panier constitué quand il
+ *    restait de la place pouvait être gonflé plus tard, une fois l'espace
+ *    plein : le contrôle à l'ajout (`addEvent`) ne suffit pas.
+ */
 const edit: RequestHandler = async (req, res, next) => {
-  try {
-    const userId = currentUserId(req);
+  const userId = currentUserId(req);
 
-    if (userId == null) {
-      res.status(401).json({ message: "Veuillez vous connecter." });
+  if (userId == null) {
+    res.status(401).json({ message: "Veuillez vous connecter." });
+    return;
+  }
+
+  const quantity = Number(req.body?.quantity);
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    res
+      .status(400)
+      .json({ message: "La quantité doit être un entier supérieur à 0." });
+    return;
+  }
+
+  const cartItemId = Number(req.params.id);
+  const connection = await databaseLeLocal.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const line = await cartRepository.readLineForUpdate(
+      connection,
+      cartItemId,
+      userId,
+    );
+
+    // Ligne inexistante, ou à quelqu'un d'autre : même réponse, rien ne fuit.
+    if (line == null) {
+      await connection.rollback();
+      res.sendStatus(404);
       return;
     }
 
-    const cartItemId = Number(req.params.id);
-    const { quantity } = req.body; // number validé avec joi
+    // Verrou sur l'espace : c'est lui qui sérialise deux modifications
+    // concurrentes visant le même créneau.
+    const space = await spaceRepository.readForUpdate(
+      connection,
+      Number(line.space_id),
+    );
+
+    if (space == null) {
+      await connection.rollback();
+      res.sendStatus(404);
+      return;
+    }
+
+    const bookingDate = new Date(line.start_date).toISOString().slice(0, 10);
+
+    // `countBookedSeats` compte AUSSI la ligne en cours de modification :
+    // on la retire, sinon augmenter de 1 en coûterait deux.
+    const booked = await spaceRepository.countBookedSeats(
+      connection,
+      Number(line.space_id),
+      bookingDate,
+      Number(line.time_slot_id),
+    );
+    const available = Math.max(
+      Number(space.capacity) - (booked - Number(line.quantity)),
+      0,
+    );
+
+    if (quantity > available) {
+      await connection.rollback();
+      res.status(409).json({
+        message:
+          available > 0
+            ? `Plus que ${available} place${available > 1 ? "s" : ""} disponible${available > 1 ? "s" : ""} pour ce créneau`
+            : "Plus aucune place disponible pour ce créneau",
+        available,
+      });
+      return;
+    }
+
+    // Le total suit la quantité, calculé depuis le prix lu en base.
+    const totalPrice = lineAmountInEuros({
+      quantity,
+      price_unit: line.price_unit,
+      space_category: line.space_category,
+      start_date: line.start_date,
+      end_date: line.end_date,
+    });
 
     const affectedRows = await cartRepository.updateQuantity(
+      connection,
       cartItemId,
       userId,
       quantity,
+      totalPrice,
     );
 
-    // 0 ligne : elle n'existe pas, ou elle est à quelqu'un d'autre.
     if (affectedRows === 0) {
+      await connection.rollback();
       res.sendStatus(404);
-    } else {
-      res.sendStatus(204);
+      return;
     }
+
+    await connection.commit();
+    res.sendStatus(204);
   } catch (err) {
+    await connection.rollback();
     next(err);
+  } finally {
+    connection.release();
   }
 };
 

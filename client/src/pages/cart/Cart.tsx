@@ -12,22 +12,21 @@ const formatHour = (hour: string) => {
 };
 
 function Cart() {
-  const cart = useCart();
-  const [carts, setCarts] = useState<CartItem[]>(cart);
+  const { items, total, loading, refresh } = useCart();
+  const [carts, setCarts] = useState<CartItem[]>([]);
+  const [totalPrice, setTotalPrice] = useState(0);
   const [message, setMessage] = useState("");
 
-  // Même calcul que celui du serveur : c'est lui qui fera foi au paiement,
-  // donc l'écran ne doit annoncer aucun autre montant.
-  const totalPrice = carts.reduce(
-    (total, item) => total + Number(item.price_unit) * item.quantity,
-    0,
-  );
-
+  // Les montants viennent du serveur, jamais d'un calcul local : c'est lui
+  // qui fera foi au paiement, donc l'écran ne doit annoncer rien d'autre.
+  // Un panier vide efface l'affichage — l'ancienne garde `length > 0`
+  // laissait les lignes supprimées à l'écran après un rechargement.
   useEffect(() => {
-    if (cart.length > 0) {
-      setCarts(cart);
-    }
-  }, [cart]);
+    if (loading) return;
+
+    setCarts(items);
+    setTotalPrice(total);
+  }, [items, total, loading]);
 
   const increaseQuantity = async (id: number) => {
     const item = carts.find((i) => i.id === id);
@@ -42,16 +41,9 @@ function Cart() {
         body: JSON.stringify({ quantity: newQuantity }),
       });
 
-      setCarts((prev) =>
-        prev.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                quantity: newQuantity,
-              }
-            : i,
-        ),
-      );
+      // Le montant de la ligne et le total sont recalculés par le serveur :
+      // on les relit plutôt que de les deviner.
+      await refresh();
     } catch (error) {
       console.error("Erreur augmentation quantité :", error);
     }
@@ -70,16 +62,7 @@ function Cart() {
         body: JSON.stringify({ quantity: newQuantity }),
       });
 
-      setCarts((prev) =>
-        prev.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                quantity: newQuantity,
-              }
-            : i,
-        ),
-      );
+      await refresh();
     } catch (error) {
       console.error("Erreur diminution quantité :", error);
     }
@@ -92,6 +75,7 @@ function Cart() {
       });
 
       setCarts((prev) => prev.filter((item) => item.id !== id));
+      await refresh();
       setMessage("Article supprimé");
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
@@ -170,7 +154,7 @@ function Cart() {
                   </div>
 
                   <span className="cart-item-price">
-                    {(Number(item.price_unit) * item.quantity).toFixed(2)} €{" "}
+                    {Number(item.line_amount).toFixed(2)} €{" "}
                   </span>
                 </div>
               </div>

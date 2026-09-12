@@ -5,7 +5,7 @@ import { monthsBetween } from "../Payment/amount";
 import activityRepository from "../activity/activityRepository";
 import spaceRepository from "../space/spaceRepository";
 import timeSlotRepository from "../timeSlot/timeSlotRepository";
-import bookingRepository from "./bookingRepository";
+import bookingRepository, { CapacityExceededError } from "./bookingRepository";
 
 /**
  * Le corps de la requête ne porte que des identifiants et des quantités.
@@ -72,6 +72,16 @@ const create: RequestHandler = async (req, res, next) => {
 
     res.status(201).json({ created });
   } catch (err) {
+    // Capacité dépassée entre la constitution du panier et le paiement :
+    // un refus métier (409), pas une panne (500).
+    if (err instanceof CapacityExceededError) {
+      res.status(err.status).json({
+        message: err.message,
+        available: err.available,
+      });
+      return;
+    }
+
     next(err);
   }
 };

@@ -21,8 +21,32 @@ jest.mock("../src/modules/cart/cartRepository", () => ({
   default: {
     readAll: jest.fn(async () => [{ id: 11 }]),
     create: jest.fn(async () => 11),
+    readLineForUpdate: jest.fn(async () => ({
+      id: 5,
+      quantity: 1,
+      id_activity: 10,
+      price_unit: "8.00",
+      start_date: "2026-10-01",
+      end_date: "2026-10-01",
+      space_id: 3,
+      time_slot_id: 1,
+      space_category: "Openspace",
+      capacity: 20,
+    })),
     updateQuantity: jest.fn(async () => 0),
     destroy: jest.fn(async () => 0),
+  },
+}));
+
+jest.mock("../src/modules/space/spaceRepository", () => ({
+  __esModule: true,
+  default: {
+    readForUpdate: jest.fn(async () => ({
+      id: 3,
+      capacity: 20,
+      space_category: "Openspace",
+    })),
+    countBookedSeats: jest.fn(async () => 1),
   },
 }));
 
@@ -85,9 +109,11 @@ describe("propriété des lignes de panier", () => {
 
     expect(res.status).toBe(404);
     expect(cartRepository.updateQuantity).toHaveBeenCalledWith(
+      connection,
       5,
       clientUser.id,
       3,
+      expect.any(Number),
     );
   });
 

@@ -3,6 +3,20 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { PoolConnection } from "mysql2/promise";
 import databaseClient from "../../../database/client";
 
+/** Ligne de panier relue sous verrou, pour revérifier prix et capacité. */
+type CartLineForUpdate = {
+  id: number;
+  quantity: number;
+  id_activity: number;
+  price_unit: number | string;
+  start_date: string | Date;
+  end_date: string | Date;
+  space_id: number;
+  time_slot_id: number;
+  space_category: string;
+  capacity: number;
+};
+
 type CartItem = {
   users_id: number;
   id_activity: number;
@@ -91,19 +105,61 @@ const create = async (
 };
 
 /**
+ * Ligne de panier lue sous verrou, avec de quoi revérifier la capacité :
+ * l'espace, son créneau, sa catégorie et sa période.
+ *
+ * À n'appeler que dans une transaction. Le `FOR UPDATE` verrouille la ligne
+ * de panier pour la durée de la modification : deux augmentations simultanées
+ * de la même ligne ne peuvent pas passer le contrôle de capacité chacune de
+ * son côté.
+ */
+const readLineForUpdate = async (
+  connection: PoolConnection,
+  cartItemId: number,
+  userId: number,
+): Promise<CartLineForUpdate | null> => {
+  const [rows] = await connection.query<RowDataPacket[]>(
+    `SELECT c.id,
+            c.quantity,
+            c.id_activity,
+            COALESCE(c.price_unit, a.price_unit) AS price_unit,
+            a.start_date,
+            a.end_date,
+            a.space_id,
+            a.time_slot_id,
+            s.space_category,
+            s.capacity
+       FROM cart c
+       JOIN activity a ON a.id = c.id_activity
+       JOIN space s ON s.id = a.space_id
+      WHERE c.id = ? AND c.users_id = ?
+      FOR UPDATE`,
+    [cartItemId, userId],
+  );
+
+  return (rows[0] as CartLineForUpdate) ?? null;
+};
+
+/**
  * Les mutations filtrent toujours sur le propriétaire de la ligne : le
  * `users_id` vient du jeton, jamais de l'URL. Zéro ligne touchée signifie
  * « pas à vous » aussi bien que « n'existe pas », et la réponse est la même
  * (404) dans les deux cas : rien ne fuit sur l'existence de la ligne.
+ *
+ * Le total accompagne la quantité : il est calculé par l'appelant depuis le
+ * prix lu en base (`lineAmountInEuros`), jamais repris du corps de la
+ * requête. Sans lui, la ligne garderait le total de la quantité précédente.
  */
 const updateQuantity = async (
+  connection: PoolConnection,
   cartItemId: number,
   userId: number,
   quantity: number,
+  totalPrice: number,
 ) => {
-  const [result] = await databaseClient.query<ResultSetHeader>(
-    "UPDATE cart SET quantity = ? WHERE id = ? AND users_id = ?",
-    [quantity, cartItemId, userId],
+  const [result] = await connection.query<ResultSetHeader>(
+    "UPDATE cart SET quantity = ?, total_price = ? WHERE id = ? AND users_id = ?",
+    [quantity, round2(totalPrice), cartItemId, userId],
   );
 
   return result.affectedRows;
@@ -118,4 +174,11 @@ const destroy = async (cartItemId: number, userId: number) => {
   return result.affectedRows;
 };
 
-export default { readAll, create, updateQuantity, destroy };
+export default {
+  readAll,
+  create,
+  readLineForUpdate,
+  updateQuantity,
+  destroy,
+};
+export type { CartLineForUpdate };

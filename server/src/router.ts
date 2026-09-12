@@ -90,7 +90,10 @@ router.get(
 router.post(
   "/api/dashboard/client/event-requests",
   authMiddleware.requireAuth,
+  // `upload` d'abord : sans lui le corps multipart n'est pas encore lu, et
+  // le schéma validerait un objet vide.
   upload.single("image"),
+  eventMiddleware.validateEventRequest,
   dashboardClientActions.addEventRequest,
 );
 // *************************************************************************

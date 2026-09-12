@@ -145,8 +145,10 @@ const addEventRequest: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    const spaceId = Number(req.body.space_id);
-    const timeSlotId = Number(req.body.time_slot_id);
+    // Corps déjà validé et converti par `eventMiddleware.validateEventRequest` :
+    // les nombres en sont, les dates ont le bon format.
+    const spaceId = req.body.space_id as number;
+    const timeSlotId = req.body.time_slot_id as number;
     const startDate = req.body.start_date as string;
 
     const slotTaken = await createEventFormRepository.isEventSlotTaken(
@@ -174,7 +176,7 @@ const addEventRequest: RequestHandler = async (req, res, next) => {
       time_slot_id: timeSlotId,
       url_image: imageUrl,
       users_id: userId,
-      price_unit: Number(req.body.price_unit) ?? 0,
+      price_unit: req.body.price_unit as number,
     });
     res.status(201).json({ insertId });
   } catch (err) {
