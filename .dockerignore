@@ -1,3 +1,56 @@
+# Contexte de construction : tout ce qui n'entre pas dans l'image.
+#
+# Deux entrées ne sont pas de l'optimisation mais de la correction :
+#   - `**/.env` : un .env local dans le contexte serait lu par Vite à la
+#     construction et écraserait VITE_API_URL (l'image pointerait alors vers
+#     http://localhost:3310 au lieu de sa propre origine) ;
+#   - `**/dist` : les artefacts sont recompilés dans l'image, jamais copiés
+#     depuis le poste de développement.
+
+# Dépendances et artefacts
 node_modules
+**/node_modules
 dist
+**/dist
+build
+coverage
+**/coverage
+
+# Secrets et configuration locale
 .env
+**/.env
+**/.env.*
+!**/.env.sample
+
+# Git et CI
+.git
+.gitignore
+.gitattributes
+.github
+.git-hooks
+.validate-branch-namerc
+
+# Documentation, captures, notes de travail
+docs
+deploy
+*.md
+.superpowers
+
+# Tests (le serveur les exclut déjà de la compilation)
+server/tests
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Contenu envoyé par les utilisateurs : il vit sur un volume, pas dans l'image
+server/public/uploads/*
+!server/public/uploads/.gitkeep
+
+# Divers
+.DS_Store
+.idea
+.vscode
+docker-compose.yml
+Dockerfile
+.dockerignore
