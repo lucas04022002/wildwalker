@@ -1,31 +1,39 @@
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 
 /**
- * Une connexion "Queryable" peut être soit le pool global, soit une
- * connexion dédiée (utilisée dans une transaction).
- */
-type Queryable = Pool | PoolConnection;
-
-/**
- * Numéro de facture : `<année>-<n>`, compté sur la table `booking`.
+ * Numéro de facture : `<année>-<n>`, servi par le compteur dédié
+ * `invoice_counter` (migration 0002).
  *
- * Logique partagée entre le paiement du panier (`bookingActions/bookingRepository.ts`,
- * dans une transaction) et la création d'une réservation depuis une demande
- * d'événement approuvée par un admin (`dashboardAdmin/dashboardAdminRepository.ts`,
- * hors transaction) : les deux comptaient déjà `<année>-%` de façon identique.
+ * L'ancienne version comptait les lignes de `booking` dont le
+ * `bills_number` commençait par l'année, puis ajoutait 1. Trois défauts,
+ * tous silencieux :
+ *
+ *   1. deux paiements simultanés lisaient le même compte et émettaient DEUX
+ *      FOIS le même numéro de facture ;
+ *   2. supprimer une réservation faisait revenir un numéro déjà utilisé ;
+ *   3. le `COUNT(*)` balayait la table, de plus en plus lentement.
+ *
+ * L'upsert ci-dessous incrémente sous verrou de ligne ; la lecture qui suit
+ * a lieu dans la MÊME transaction, donc derrière ce verrou. D'où la
+ * signature : une `PoolConnection`, pas le pool. Avec le pool, les deux
+ * requêtes pourraient partir sur deux connexions différentes — et le verrou
+ * ne servirait plus à rien.
  */
 const nextBillsNumber = async (
-  connection: Queryable,
+  connection: PoolConnection,
   year: number,
 ): Promise<string> => {
-  const [rows] = await connection.query<RowDataPacket[]>(
-    "SELECT COUNT(*) as count FROM booking WHERE bills_number LIKE ?",
-    [`${year}-%`],
+  await connection.query(
+    "INSERT INTO invoice_counter (`year`, `last`) VALUES (?, 1) ON DUPLICATE KEY UPDATE `last` = `last` + 1",
+    [year],
   );
 
-  const count = Number((rows as { count: number }[])[0].count);
+  const [rows] = await connection.query<RowDataPacket[]>(
+    "SELECT `last` FROM invoice_counter WHERE `year` = ?",
+    [year],
+  );
 
-  return `${year}-${count + 1}`;
+  return `${year}-${Number(rows[0].last)}`;
 };
 
 export default { nextBillsNumber };

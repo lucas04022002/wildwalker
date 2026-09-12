@@ -66,7 +66,8 @@ jobs:
                    server/dist/bin/migrate.js \
                    server/dist/bin/seed.js \
                    server/dist/database/seed.sql \
-                   server/dist/database/migrations/0001_init.sql; do
+                   server/dist/database/migrations/0001_init.sql \
+                   server/dist/database/migrations/0002_invoice_counter.sql; do
             test -f "$f" || { echo "manquant : $f"; exit 1; }
           done
 
@@ -124,7 +125,9 @@ jobs:
         run: npm run db:seed --workspace=server
 
       - name: Tests d'intégration
-        run: npx jest --ci tests/booking.int.test.ts
+        # Toutes les suites `*.int.test.ts`, en série : elles partagent la
+        # même base et les mêmes tables de démonstration.
+        run: npx jest --ci --runInBand --testPathPattern "int\.test\.ts$"
         working-directory: server
 
   image:

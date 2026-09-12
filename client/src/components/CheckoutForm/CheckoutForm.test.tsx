@@ -6,7 +6,10 @@ import CheckoutForm from "./CheckoutForm";
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 const confirmPayment = vi.hoisted(() =>
-  vi.fn(async () => ({ error: undefined as { message?: string } | undefined })),
+  vi.fn(async () => ({
+    error: undefined as { message?: string } | undefined,
+    paymentIntent: { id: "pi_test_123" } as { id: string } | undefined,
+  })),
 );
 
 vi.mock("@stripe/react-stripe-js", () => ({
@@ -32,7 +35,10 @@ describe("CheckoutForm", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
     onSuccess.mockClear();
-    confirmPayment.mockResolvedValue({ error: undefined });
+    confirmPayment.mockResolvedValue({
+      error: undefined,
+      paymentIntent: { id: "pi_test_123" },
+    });
   });
 
   afterEach(() => {
@@ -50,6 +56,37 @@ describe("CheckoutForm", () => {
       `${API_URL}/api/booking`,
       expect.objectContaining({ method: "POST", credentials: "include" }),
     );
+  });
+
+  it("transmet la référence de l'intention de paiement au serveur", async () => {
+    // Sans elle, le serveur n'a aucune preuve que la carte a été débitée :
+    // c'est cette référence qu'il relit chez Stripe.
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ created: 1 }, 201));
+
+    render(<CheckoutForm totalPrice={45} onSuccess={onSuccess} />);
+    await pay();
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({
+      paymentIntentId: "pi_test_123",
+    });
+  });
+
+  it("un refus de paiement (402) prévient sans écran de confirmation", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ message: "Paiement non confirmé" }, 402),
+    );
+
+    render(<CheckoutForm totalPrice={45} onSuccess={onSuccess} />);
+    await pay();
+
+    expect(
+      await screen.findByText(
+        "Paiement encaissé mais réservation non enregistrée : contactez-nous en indiquant votre e-mail.",
+      ),
+    ).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("prévient l'utilisateur si le paiement passe mais pas la réservation", async () => {
@@ -95,7 +132,10 @@ describe("CheckoutForm", () => {
   });
 
   it("affiche l'erreur de Stripe et n'appelle pas l'API de réservation", async () => {
-    confirmPayment.mockResolvedValue({ error: { message: "Carte refusée." } });
+    confirmPayment.mockResolvedValue({
+      error: { message: "Carte refusée." },
+      paymentIntent: undefined,
+    });
 
     render(<CheckoutForm totalPrice={45} onSuccess={onSuccess} />);
     await pay();

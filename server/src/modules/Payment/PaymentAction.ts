@@ -23,8 +23,12 @@ const createIntent: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    const clientSecret =
-      await paymentRepository.createPaymentIntent(amountInCents);
+    // `userId` part en metadata : la réservation vérifiera plus tard que
+    // l'intention présentée est bien celle de cet utilisateur.
+    const clientSecret = await paymentRepository.createPaymentIntent(
+      amountInCents,
+      userId,
+    );
 
     res.json({ clientSecret, amount: amountInCents });
   } catch (err) {

@@ -1,6 +1,8 @@
 import type { RequestHandler } from "express";
 import type { PoolConnection } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
+import type { RetrievedIntent } from "../Payment/PaymentRepository";
+import paymentRepository from "../Payment/PaymentRepository";
 import { monthsBetween } from "../Payment/amount";
 import activityRepository from "../activity/activityRepository";
 import spaceRepository from "../space/spaceRepository";
@@ -48,11 +50,26 @@ const effectivePriceFor = async (
   return round2(basePrice * (isFullDay ? FULL_DAY_MULTIPLIER : 1));
 };
 
+/** Réponse unique en cas de paiement non prouvé : rien n'est détaillé. */
+const PAYMENT_NOT_CONFIRMED = "Paiement non confirmé";
+
 /**
  * POST /api/booking
  * Transforme le panier de l'utilisateur connecté en réservations.
- * Le corps de la requête est ignoré : l'utilisateur vient du jeton et les
- * prix sont relus en base.
+ *
+ * Body : `{ paymentIntentId }` — et rien d'autre. L'utilisateur vient du
+ * jeton, les prix sont relus en base.
+ *
+ * La route exigeait auparavant la seule bonne foi du navigateur : un `curl`
+ * muni d'un cookie de session valide réservait sans payer. Le serveur relit
+ * désormais l'intention CHEZ STRIPE et la confronte au panier :
+ *
+ *   - statut `succeeded` (l'argent est arrivé) ;
+ *   - montant exactement égal au total du panier, en centimes ;
+ *   - `metadata.userId`, posé à la création de l'intention, égal à
+ *     l'utilisateur connecté — on ne présente pas le paiement d'un autre.
+ *
+ * Tout écart répond 402, sans dire lequel.
  */
 const create: RequestHandler = async (req, res, next) => {
   try {
@@ -60,6 +77,55 @@ const create: RequestHandler = async (req, res, next) => {
 
     if (userId == null) {
       res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
+    const paymentIntentId = req.body?.paymentIntentId;
+
+    if (typeof paymentIntentId !== "string" || paymentIntentId.trim() === "") {
+      res
+        .status(400)
+        .json({ message: "Référence de paiement manquante ou invalide." });
+      return;
+    }
+
+    // Montant attendu, lu en base AVANT toute écriture : c'est lui qui sert
+    // de référence, jamais un montant envoyé par le client.
+    const expectedAmount = await paymentRepository.amountForUser(userId);
+
+    if (expectedAmount <= 0) {
+      res.status(400).json({ message: "Votre panier est vide." });
+      return;
+    }
+
+    let intent: RetrievedIntent | null = null;
+
+    try {
+      intent = await paymentRepository.retrievePaymentIntent(
+        paymentIntentId.trim(),
+      );
+    } catch {
+      // Référence inconnue, clé invalide, Stripe injoignable : dans le doute,
+      // on ne réserve pas.
+      res.status(402).json({ message: PAYMENT_NOT_CONFIRMED });
+      return;
+    }
+
+    const intentUserId = intent?.metadata?.userId;
+
+    const proven =
+      intent != null &&
+      intent.status === "succeeded" &&
+      Number(intent.amount) === expectedAmount &&
+      // Les intentions créées avant l'ajout de la metadata n'en portent pas :
+      // on ne rejette pas ce qu'on ne peut pas vérifier, le montant et le
+      // statut restent contrôlés.
+      (intentUserId == null ||
+        intentUserId === "" ||
+        Number(intentUserId) === userId);
+
+    if (!proven) {
+      res.status(402).json({ message: PAYMENT_NOT_CONFIRMED });
       return;
     }
 

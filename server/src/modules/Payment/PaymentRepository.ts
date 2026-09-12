@@ -49,14 +49,51 @@ const readCartPriceRows = async (userId: number): Promise<CartPriceRow[]> => {
 const amountForUser = async (userId: number): Promise<number> =>
   computeCartAmount(await readCartPriceRows(userId));
 
-/** `amountInCents` est déjà en centimes : aucune conversion ici. */
-const createPaymentIntent = async (amountInCents: number) => {
+/**
+ * `amountInCents` est déjà en centimes : aucune conversion ici.
+ *
+ * `metadata.userId` accompagne l'intention : au moment de réserver, le
+ * serveur peut ainsi vérifier que le paiement présenté est bien celui de
+ * l'utilisateur connecté, et pas celui de quelqu'un d'autre.
+ */
+const createPaymentIntent = async (
+  amountInCents: number,
+  userId: number,
+): Promise<string | null> => {
   const paymentIntent = await getStripe().paymentIntents.create({
     amount: amountInCents,
     currency: "eur",
+    metadata: { userId: String(userId) },
   });
 
   return paymentIntent.client_secret;
 };
 
-export default { amountForUser, createPaymentIntent, readCartPriceRows };
+/** Intention de paiement telle que Stripe la connaît, lue à la source. */
+type RetrievedIntent = {
+  id: string;
+  status: string;
+  amount: number;
+  metadata?: Record<string, string> | null;
+};
+
+/**
+ * Relit une intention de paiement CHEZ STRIPE.
+ *
+ * C'est le seul moyen de savoir si l'argent est réellement arrivé : le
+ * navigateur peut affirmer n'importe quoi, Stripe non.
+ */
+const retrievePaymentIntent = async (
+  paymentIntentId: string,
+): Promise<RetrievedIntent> =>
+  (await getStripe().paymentIntents.retrieve(
+    paymentIntentId,
+  )) as unknown as RetrievedIntent;
+
+export default {
+  amountForUser,
+  createPaymentIntent,
+  readCartPriceRows,
+  retrievePaymentIntent,
+};
+export type { RetrievedIntent };

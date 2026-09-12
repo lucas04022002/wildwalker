@@ -194,7 +194,7 @@ describe("runMigrations", () => {
 
     const applied = await runMigrations(fake.pool, dir);
 
-    expect(applied).toEqual(["0001_init.sql"]);
+    expect(applied).toEqual(["0001_init.sql", "0002_invoice_counter.sql"]);
     for (const sql of fake.allQueries()) {
       expect(sql).not.toMatch(/drop\s+database/i);
       expect(sql).not.toMatch(/drop\s+table/i);

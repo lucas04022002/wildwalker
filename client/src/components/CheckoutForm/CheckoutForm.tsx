@@ -38,7 +38,7 @@ function CheckoutForm({ totalPrice, onSuccess }: Props) {
     let paid = false;
 
     try {
-      const { error } = await stripe.confirmPayment({
+      const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
           return_url: `${window.location.origin}/confirmation`,
@@ -54,9 +54,14 @@ function CheckoutForm({ totalPrice, onSuccess }: Props) {
       paid = true;
       setIsPaid(true);
 
-      // Corps vide : le serveur transforme le panier de l'utilisateur
-      // connecté en réservations, aux prix relus en base.
-      const response = await apiFetch("/api/booking", { method: "POST" });
+      // La référence de l'intention est la SEULE chose transmise : le
+      // serveur la relit chez Stripe et la confronte au panier. Ni montant
+      // ni panier ne voyagent depuis le navigateur.
+      const response = await apiFetch("/api/booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentIntentId: paymentIntent?.id }),
+      });
 
       if (!response.ok) {
         setErrorMessage(BOOKING_FAILED);
