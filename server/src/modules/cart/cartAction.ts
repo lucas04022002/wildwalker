@@ -3,11 +3,27 @@ import databaseLeLocal from "../../../database/client";
 import eventRepository from "../event/eventRepository";
 import cartRepository from "./cartRepository";
 
-// Browse — GET /api/cart/:userId
-// Retourne tous les articles du panier avec le détail des événements
+/**
+ * Le panier appartient à l'utilisateur du jeton, et à lui seul.
+ *
+ * Aucune route du panier ne lit d'identifiant d'utilisateur dans l'URL ni
+ * dans le corps de la requête : tout part de `req.user.id`, posé par
+ * `requireAuth`.
+ */
+const currentUserId = (req: Parameters<RequestHandler>[0]): number | null =>
+  req.user?.id ?? null;
+
+// Browse — GET /api/cart
+// Retourne tous les articles du panier de l'utilisateur connecté
 const browse: RequestHandler = async (req, res, next) => {
   try {
-    const userId = Number(req.params.userId);
+    const userId = currentUserId(req);
+
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
     const items = await cartRepository.readAll(userId);
     res.json(items);
   } catch (err) {
@@ -16,13 +32,19 @@ const browse: RequestHandler = async (req, res, next) => {
 };
 
 // Add — POST /api/cart
-// Body attendu : { user_id, event_id, quantity, total_price }
-
+// Body attendu : { event_id, quantity, total_price, ... }
 const addEvent: RequestHandler = async (req, res, next) => {
+  const userId = currentUserId(req);
+
+  if (userId == null) {
+    res.status(401).json({ message: "Veuillez vous connecter." });
+    return;
+  }
+
   const connection = await databaseLeLocal.getConnection();
   try {
     // middleware a déjà tout converti en nombres.
-    const { users_id, event_id, quantity, total_price } = req.body;
+    const { event_id, quantity, total_price } = req.body;
 
     await connection.beginTransaction();
 
@@ -44,7 +66,7 @@ const addEvent: RequestHandler = async (req, res, next) => {
     }
 
     const newItem = {
-      users_id,
+      users_id: userId,
       id_activity: event_id,
       quantity,
       total_price,
@@ -69,14 +91,23 @@ const addEvent: RequestHandler = async (req, res, next) => {
 // Body attendu : { quantity }
 const edit: RequestHandler = async (req, res, next) => {
   try {
-    const cartItemId = Number(req.params.id); // À garder si tu ne valides pas req.params avec Joi
+    const userId = currentUserId(req);
+
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
+    const cartItemId = Number(req.params.id);
     const { quantity } = req.body; // number validé avec joi
 
     const affectedRows = await cartRepository.updateQuantity(
       cartItemId,
+      userId,
       quantity,
     );
 
+    // 0 ligne : elle n'existe pas, ou elle est à quelqu'un d'autre.
     if (affectedRows === 0) {
       res.sendStatus(404);
     } else {
@@ -88,11 +119,18 @@ const edit: RequestHandler = async (req, res, next) => {
 };
 
 // Destroy — DELETE /api/cart/:id
-// Supprime un article précis du panier
+// Supprime un article précis du panier de l'utilisateur connecté
 const destroy: RequestHandler = async (req, res, next) => {
   try {
+    const userId = currentUserId(req);
+
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
     const cartItemId = Number(req.params.id);
-    const affectedRows = await cartRepository.destroy(cartItemId);
+    const affectedRows = await cartRepository.destroy(cartItemId, userId);
 
     if (affectedRows === 0) {
       res.sendStatus(404);
@@ -105,10 +143,17 @@ const destroy: RequestHandler = async (req, res, next) => {
 };
 
 // DestroyAll — DELETE /api/cart/user/:userId
-// Vide tout le panier d'un utilisateur (ex: après paiement)
+// Vide le panier de l'utilisateur connecté (ex: après paiement).
+// Le `:userId` de l'URL est ignoré, le client sera nettoyé à la tâche 3.
 const destroyAll: RequestHandler = async (req, res, next) => {
   try {
-    const userId = Number(req.params.userId);
+    const userId = currentUserId(req);
+
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
     await cartRepository.destroyAll(userId);
     res.sendStatus(204);
   } catch (err) {

@@ -1,9 +1,16 @@
 import type { RequestHandler } from "express";
+import type { PoolConnection } from "mysql2/promise";
 import databaseLeLocal from "../../../database/client";
 import activityRepository from "../activity/activityRepository";
 import spaceRepository from "../space/spaceRepository";
+import timeSlotRepository from "../timeSlot/timeSlotRepository";
 import bookingRepository from "./bookingRepository";
 
+/**
+ * Le corps de la requête ne porte que des identifiants et des quantités.
+ * Ni l'utilisateur (il vient du jeton) ni les prix (relus en base) ne sont
+ * acceptés du client.
+ */
 type BookingPayload = {
   space_id: number;
   time_slot_id: number | null;
@@ -11,15 +18,80 @@ type BookingPayload = {
   end_date: string;
   seats: number | null;
   months: number | null;
-  users_id: number;
-  total_price: number;
-  name?: string;
-  email?: string;
-  effective_price: number;
 };
 
 // Créneau horaire utilisé par défaut quand aucun n'est fourni (ex: pour les "Local vide", qui n'ont pas vraiment de créneau mais en ont besoin pour être stockés dans la table `activity`)
 const DEFAULT_TIME_SLOT_ID = 4;
+
+/** Majoration du créneau « Journée », qui couvre matin et après-midi. */
+const FULL_DAY_MULTIPLIER = 1.75;
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/**
+ * Nombre de mois entiers entre deux dates (arrondi à l'entier inférieur,
+ * jamais négatif). Même règle que celle affichée au client, mais calculée
+ * ici : c'est elle qui fait foi.
+ */
+const monthsBetween = (start: string, end: string): number => {
+  const from = new Date(start);
+  const to = new Date(end);
+
+  let months =
+    (to.getFullYear() - from.getFullYear()) * 12 +
+    (to.getMonth() - from.getMonth());
+
+  if (to.getDate() < from.getDate()) months -= 1;
+
+  return Math.max(months, 0);
+};
+
+/** Prix unitaire effectif, calculé depuis l'espace et le créneau lus en base. */
+const effectivePriceFor = async (
+  connection: PoolConnection,
+  spacePriceUnit: number | string,
+  timeSlotId: number,
+  isLocal: boolean,
+): Promise<number> => {
+  const basePrice = Number(spacePriceUnit);
+
+  if (isLocal) {
+    return round2(basePrice);
+  }
+
+  const slot = await timeSlotRepository.readForBooking(connection, timeSlotId);
+  const isFullDay = slot?.slot === "Journée";
+
+  return round2(basePrice * (isFullDay ? FULL_DAY_MULTIPLIER : 1));
+};
+
+/**
+ * POST /api/booking
+ * Transforme le panier de l'utilisateur connecté en réservations.
+ * Le corps de la requête est ignoré : l'utilisateur vient du jeton et les
+ * prix sont relus en base.
+ */
+const create: RequestHandler = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (userId == null) {
+      res.status(401).json({ message: "Veuillez vous connecter." });
+      return;
+    }
+
+    const created = await bookingRepository.createFromCart(userId);
+
+    if (created === 0) {
+      res.status(400).json({ message: "Votre panier est vide." });
+      return;
+    }
+
+    res.status(201).json({ created });
+  } catch (err) {
+    next(err);
+  }
+};
 
 /**
  * POST /api/bookings
@@ -32,20 +104,18 @@ const DEFAULT_TIME_SLOT_ID = 4;
  *
  * Toute l'opération est faite dans une transaction SQL avec verrouillage de la ligne `space` (FOR UPDATE) afin d'éviter les race conditions si deux utilisateurs réservent en même temps (double-booking).
  */
-const create: RequestHandler = async (req, res, next) => {
-  try {
-    const { userId, cartItems } = req.body;
-    await bookingRepository.create(userId, cartItems);
-    res.sendStatus(201);
-  } catch (err) {
-    next(err);
-  }
-};
 const add: RequestHandler = async (req, res, next) => {
+  const userId = req.user?.id;
+
+  if (userId == null) {
+    res.status(401).json({ message: "Veuillez vous connecter." });
+    return;
+  }
+
   const body = req.body as BookingPayload;
 
   // Validation basique des champs obligatoires
-  if (!body.space_id || !body.start_date || !body.end_date || !body.users_id) {
+  if (!body.space_id || !body.start_date || !body.end_date) {
     res.status(400).json({ message: "Champs requis manquants" });
     return;
   }
@@ -78,8 +148,26 @@ const add: RequestHandler = async (req, res, next) => {
     const isOpenSpace = space.space_category.toLowerCase().includes("open");
     const isLocal = space.space_category === "Local vide";
 
+    // Prix relus en base : le client n'a pas voix au chapitre.
+    const effectivePrice = await effectivePriceFor(
+      connection,
+      space.price_unit,
+      effectiveTimeSlotId,
+      isLocal,
+    );
+
     // --- Branche 1 : "Local vide" (réservation sur une période) ---
     if (isLocal) {
+      const months = monthsBetween(body.start_date, body.end_date);
+
+      if (months < 1) {
+        await connection.rollback();
+        res.status(400).json({
+          message: "Un local se réserve pour un mois complet au minimum",
+        });
+        return;
+      }
+
       // Vérifie qu'aucune réservation existante ne chevauche la période demandée
       const overlapping = await spaceRepository.hasOverlappingDateRange(
         connection,
@@ -102,7 +190,7 @@ const add: RequestHandler = async (req, res, next) => {
         spaceId: body.space_id,
         startDate: body.start_date,
         endDate: body.end_date,
-        priceUnit: space.price_unit,
+        priceUnit: effectivePrice,
         urlImage: space.url_image,
       });
 
@@ -111,9 +199,9 @@ const add: RequestHandler = async (req, res, next) => {
  VALUES (?, ?, ?, ?, ?)`,
         [
           quantity,
-          body.total_price,
-          body.effective_price,
-          body.users_id,
+          round2(effectivePrice * months),
+          effectivePrice,
+          userId,
           activity.id,
         ],
       );
@@ -148,20 +236,14 @@ const add: RequestHandler = async (req, res, next) => {
         spaceId: body.space_id,
         startDate: body.start_date,
         endDate: body.end_date,
-        priceUnit: space.price_unit,
+        priceUnit: effectivePrice,
         urlImage: space.url_image,
       });
 
       const [result] = await connection.query(
         `INSERT INTO cart (quantity, total_price, price_unit, users_id, id_activity)
  VALUES (?, ?, ?, ?, ?)`,
-        [
-          quantity,
-          body.total_price,
-          body.effective_price,
-          body.users_id,
-          activity.id,
-        ],
+        [quantity, effectivePrice, effectivePrice, userId, activity.id],
       );
 
       await connection.commit();
@@ -178,7 +260,7 @@ const add: RequestHandler = async (req, res, next) => {
       spaceId: body.space_id,
       startDate: body.start_date,
       endDate: body.end_date,
-      priceUnit: space.price_unit,
+      priceUnit: effectivePrice,
       urlImage: space.url_image,
     });
 
@@ -209,9 +291,9 @@ const add: RequestHandler = async (req, res, next) => {
  VALUES (?, ?, ?, ?, ?)`,
       [
         quantity,
-        body.total_price,
-        body.effective_price,
-        body.users_id,
+        round2(effectivePrice * quantity),
+        effectivePrice,
+        userId,
         activity.id,
       ],
     );
@@ -233,3 +315,4 @@ const add: RequestHandler = async (req, res, next) => {
 };
 
 export default { add, create };
+export { monthsBetween };

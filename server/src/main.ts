@@ -10,7 +10,19 @@ import "dotenv/config";
  * dynamiquement, après la validation de l'environnement.
  */
 
-const REQUIRED_ENV = ["APP_PORT", "DB_HOST", "DB_PORT", "DB_USER", "DB_NAME"];
+// `CLIENT_URL` et `JWT_SECRET` sont exigées : sans la première, CORS et la
+// garde d'origine n'ont aucune origine de référence ; sans la seconde, aucune
+// session ne peut être signée. Mieux vaut refuser de démarrer que tourner
+// avec une sécurité inopérante.
+const REQUIRED_ENV = [
+  "APP_PORT",
+  "CLIENT_URL",
+  "DB_HOST",
+  "DB_PORT",
+  "DB_USER",
+  "DB_NAME",
+  "JWT_SECRET",
+];
 
 const fail = (message: string): never => {
   console.error(`Démarrage impossible : ${message}`);

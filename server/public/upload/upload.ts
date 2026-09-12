@@ -1,15 +1,27 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Request } from "express";
-import multer, { type StorageEngine, type FileFilterCallback } from "multer";
+import multer, { type FileFilterCallback, type StorageEngine } from "multer";
 
 const uploadDir = path.join(process.cwd(), "public", "uploads");
-
-console.log("UPLOAD DIR =", uploadDir);
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+
+/**
+ * Types acceptés, et extension imposée pour chacun.
+ *
+ * Le nom d'origine du fichier n'est jamais réutilisé : il vient du client,
+ * donc il peut contenir des séparateurs de chemin, une double extension, ou
+ * de quoi écraser un fichier voisin. Le nom stocké est fabriqué ici.
+ */
+const ALLOWED_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 const storage: StorageEngine = multer.diskStorage({
   destination: (
@@ -25,8 +37,14 @@ const storage: StorageEngine = multer.diskStorage({
     file: Express.Multer.File,
     cb: (error: Error | null, filename: string) => void,
   ) => {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
+    const extension = ALLOWED_TYPES[file.mimetype];
+
+    if (extension == null) {
+      cb(new Error("Format non supporté. Utilisez JPG, PNG ou WEBP."), "");
+      return;
+    }
+
+    cb(null, `${Date.now()}-${randomUUID()}.${extension}`);
   },
 });
 
@@ -35,9 +53,7 @@ const fileFilter = (
   file: Express.Multer.File,
   cb: FileFilterCallback,
 ) => {
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-
-  if (allowedTypes.includes(file.mimetype)) {
+  if (ALLOWED_TYPES[file.mimetype] != null) {
     cb(null, true);
   } else {
     cb(new Error("Format non supporté. Utilisez JPG, PNG ou WEBP."));

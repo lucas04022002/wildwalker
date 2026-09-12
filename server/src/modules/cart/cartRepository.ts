@@ -79,19 +79,29 @@ const create = async (
   return result.insertId;
 };
 
-const updateQuantity = async (cartItemId: number, quantity: number) => {
+/**
+ * Les mutations filtrent toujours sur le propriétaire de la ligne : le
+ * `users_id` vient du jeton, jamais de l'URL. Zéro ligne touchée signifie
+ * « pas à vous » aussi bien que « n'existe pas », et la réponse est la même
+ * (404) dans les deux cas : rien ne fuit sur l'existence de la ligne.
+ */
+const updateQuantity = async (
+  cartItemId: number,
+  userId: number,
+  quantity: number,
+) => {
   const [result] = await databaseClient.query<ResultSetHeader>(
-    "UPDATE cart SET quantity = ? WHERE id = ?",
-    [quantity, cartItemId],
+    "UPDATE cart SET quantity = ? WHERE id = ? AND users_id = ?",
+    [quantity, cartItemId, userId],
   );
 
   return result.affectedRows;
 };
 
-const destroy = async (cartItemId: number) => {
+const destroy = async (cartItemId: number, userId: number) => {
   const [result] = await databaseClient.query<ResultSetHeader>(
-    "DELETE FROM cart WHERE id = ?",
-    [cartItemId],
+    "DELETE FROM cart WHERE id = ? AND users_id = ?",
+    [cartItemId, userId],
   );
 
   return result.affectedRows;
