@@ -59,7 +59,8 @@ export default function SignIn() {
         <div className="auth-form-wrapper">
           <h1 className="auth-title">Créer votre compte</h1>
 
-          {error && <p className="auth-error">{error}</p>}
+          {/* <output> : rôle « status », annoncé sans changement de page. */}
+          {error && <output className="auth-error">{error}</output>}
 
           <div className="auth-fields">
             <div className="auth-row">

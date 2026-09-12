@@ -6,7 +6,7 @@ import ImgTitle from "../../assets/images/ImgTitleLeLocale.png";
 import { useSession } from "../../hooks/useSession";
 
 function NavBar() {
-  const { user } = useSession();
+  const { user, loading } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
@@ -57,7 +57,10 @@ function NavBar() {
       </div>
 
       <div className="navbar-connection-div">
-        {user ? (
+        {/* Tant que la session est inconnue, on n'affiche ni l'un ni l'autre :
+            sinon un utilisateur connecté voit passer « Se connecter » à
+            chaque chargement de page. */}
+        {loading ? null : user ? (
           <Link
             to={
               user.role === "admin" ? "/dashboard-admin" : "/dashboard-client"

@@ -11,6 +11,14 @@ interface Props {
   onSuccess: () => void;
 }
 
+/**
+ * Message affiché quand la carte a été débitée mais que la réservation n'a pas
+ * été enregistrée. C'est le pire cas possible pour l'utilisateur : il doit le
+ * savoir tout de suite, et surtout pas voir un écran de confirmation.
+ */
+const BOOKING_FAILED =
+  "Paiement encaissé mais réservation non enregistrée : contactez-nous en indiquant votre e-mail.";
+
 function CheckoutForm({ totalPrice, onSuccess }: Props) {
   const stripe = useStripe();
   const elements = useElements();
@@ -25,27 +33,47 @@ function CheckoutForm({ totalPrice, onSuccess }: Props) {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { error } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/confirmation`,
-      },
-      redirect: "if_required",
-    });
+    // `isPaid` (l'état) ne change pas dans cette closure : on suit le débit
+    // avec une variable locale pour savoir quel message afficher si ça casse.
+    let paid = false;
 
-    if (error) {
-      setErrorMessage(error.message ?? "Une erreur est survenue.");
-    } else {
+    try {
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/confirmation`,
+        },
+        redirect: "if_required",
+      });
+
+      if (error) {
+        setErrorMessage(error.message ?? "Une erreur est survenue.");
+        return;
+      }
+
+      paid = true;
       setIsPaid(true);
 
       // Corps vide : le serveur transforme le panier de l'utilisateur
       // connecté en réservations, aux prix relus en base.
-      await apiFetch("/api/booking", { method: "POST" });
+      const response = await apiFetch("/api/booking", { method: "POST" });
+
+      if (!response.ok) {
+        setErrorMessage(BOOKING_FAILED);
+        return;
+      }
 
       onSuccess();
+    } catch {
+      // Réseau coupé : le message dépend de ce qui a déjà eu lieu. Après le
+      // débit, c'est la situation à signaler d'urgence.
+      setErrorMessage(
+        paid ? BOOKING_FAILED : "Une erreur est survenue, veuillez réessayer.",
+      );
+    } finally {
+      // Quoi qu'il arrive, le bouton doit redevenir utilisable.
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -54,7 +82,10 @@ function CheckoutForm({ totalPrice, onSuccess }: Props) {
 
       <PaymentElement />
 
-      {errorMessage && <p className="checkout-error">{errorMessage}</p>}
+      {/* <output> : rôle « status », annoncé sans changement de page. */}
+      {errorMessage && (
+        <output className="checkout-error">{errorMessage}</output>
+      )}
 
       <button type="submit" disabled={isLoading || !stripe}>
         {isLoading ? "Traitement..." : `Payer ${totalPrice.toFixed(2)} €`}

@@ -1,21 +1,24 @@
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import CheckoutForm from "../../components/CheckoutForm/CheckoutForm";
 import "./Payment.css";
 import { apiFetch } from "../../hooks/apiFetch";
-import useClearCart from "../../hooks/useClearCart";
 import { useSession } from "../../hooks/useSession";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
+const SESSION_PERDUE =
+  "Votre session a expiré. Reconnectez-vous pour finaliser votre commande.";
+
 function Payment() {
-  const { user } = useSession();
+  const { user, loading } = useSession();
+  const navigate = useNavigate();
   const [clientSecret, setClientSecret] = useState("");
   /** Montant en centimes, tel que le serveur l'a calculé depuis le panier. */
   const [amountInCents, setAmountInCents] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const clearCart = useClearCart();
 
   useEffect(() => {
     // Corps vide : le montant est relu en base à partir du panier de
@@ -36,27 +39,31 @@ function Payment() {
       .catch(() => setError("Impossible de contacter le serveur."));
   }, []);
 
-  if (error) {
+  const erreurAffichee = !loading && !user ? SESSION_PERDUE : error;
+
+  if (erreurAffichee) {
     return (
       <section className="payment-page">
         <h1>Finaliser votre commande</h1>
-        <p>{error}</p>
+        <output>{erreurAffichee}</output>
       </section>
     );
   }
 
-  if (!clientSecret) {
+  if (loading || !clientSecret) {
     return <p>Chargement du paiement...</p>;
   }
 
   const totalPrice = amountInCents / 100;
 
-  const handlePaymentSuccess = async () => {
-    if (!user?.id) {
-      console.error("Pas d'ID utilisateur trouvé.");
-      return;
-    }
-    await clearCart(user.id);
+  /**
+   * Appelé uniquement quand `POST /api/booking` a réussi. Le panier a déjà été
+   * vidé côté serveur, dans la même transaction que les réservations : rien à
+   * nettoyer depuis le navigateur. La navigation est explicite, elle ne dépend
+   * plus du succès d'un appel de suppression.
+   */
+  const handlePaymentSuccess = () => {
+    navigate("/confirmation", { replace: true });
   };
 
   return (

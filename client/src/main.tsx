@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import ReactDOM from "react-dom/client";
+import type { RouteObject } from "react-router";
 import { RouterProvider, createBrowserRouter } from "react-router";
 import App from "./App";
 import Confirmation from "./components/Confirmation/Confirmation";
@@ -29,8 +30,11 @@ const guarded = (role: "client" | "admin", page: ReactNode) => (
   <RequireRole role={role}>{page}</RequireRole>
 );
 
-// Router
-const router = createBrowserRouter([
+/**
+ * Table des routes, exportée pour que les tests puissent vérifier que les
+ * pages protégées le sont réellement, sans monter toute l'application.
+ */
+export const routes: RouteObject[] = [
   {
     path: "/invoice/:bookingId",
     element: guarded("client", <InvoicePage />),
@@ -84,7 +88,9 @@ const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+const router = createBrowserRouter(routes);
 
 const rootElement = document.getElementById("root");
 

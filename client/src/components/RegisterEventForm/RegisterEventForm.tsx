@@ -2,7 +2,7 @@ import "./RegisterEventForm.css";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../hooks/apiFetch";
 import { useEventModalContext } from "../../hooks/useEventModalContext";
-import type { CartItem } from "../../types/cartitem";
+import type { CartItemPayload } from "../../types/cartitem";
 import type { QuantityConfig } from "../../types/quantityconfig";
 
 interface CardEventProps {
@@ -118,7 +118,7 @@ function RegisterEventForm({ event, participants }: CardEventProps) {
     // On construit l'objet proprement au moment du clic, avec la quantité à
     // jour. Ni `users_id` ni `total_price` : le propriétaire de la ligne vient
     // du cookie de session, et le prix est relu en base par le serveur.
-    const eventBookingPayload: CartItem = {
+    const eventBookingPayload: CartItemPayload = {
       event_id: event.id,
       quantity: quantityConfig.value,
       last_name: formData.nom,

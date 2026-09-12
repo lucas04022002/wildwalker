@@ -40,6 +40,10 @@ for (const name of ["localStorage", "sessionStorage"] as const) {
   }
 }
 
+// jsdom n'implémente pas le défilement : sans ce remplacement, chaque
+// composant qui appelle `scrollTo` inonde la sortie des tests.
+window.scrollTo = () => {};
+
 // Les globales de test ne sont pas exposées (`globals` désactivé) : le nettoyage
 // automatique de Testing Library ne peut pas s'enregistrer seul. Sans lui, le
 // DOM d'un test reste visible dans le suivant.

@@ -1,10 +1,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Session, SessionUser } from "../../hooks/useSession";
 import Payment from "./Payment";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
+
+const useSessionMock = vi.hoisted(() => vi.fn<() => Session>());
+
+vi.mock("../../hooks/useSession", () => ({ useSession: useSessionMock }));
 
 // Stripe n'est pas joignable en test : le formulaire de carte est remplacé
 // par un repère, ce qui laisse la page elle-même sous test.
@@ -15,10 +21,31 @@ vi.mock("@stripe/stripe-js", () => ({
   loadStripe: () => Promise.resolve(null),
 }));
 vi.mock("../../components/CheckoutForm/CheckoutForm", () => ({
-  default: ({ totalPrice }: { totalPrice: number }) => (
-    <p data-testid="bouton-payer">Payer {totalPrice.toFixed(2)} €</p>
+  default: ({
+    totalPrice,
+    onSuccess,
+  }: {
+    totalPrice: number;
+    onSuccess: () => void;
+  }) => (
+    <button type="button" onClick={onSuccess}>
+      Payer {totalPrice.toFixed(2)} €
+    </button>
   ),
 }));
+
+const client: SessionUser = {
+  id: 7,
+  email: "client@lelocal.fr",
+  role: "client",
+  firstname: "Chloé",
+};
+
+const session = (user: SessionUser | null, loading = false): Session => ({
+  user,
+  loading,
+  refresh: vi.fn(async () => {}),
+});
 
 const jsonResponse = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -28,14 +55,21 @@ const jsonResponse = (body: unknown, status: number) =>
 
 const renderPayment = () =>
   render(
-    <MemoryRouter>
-      <Payment />
+    <MemoryRouter initialEntries={["/payment"]}>
+      <Routes>
+        <Route path="/payment" element={<Payment />} />
+        <Route
+          path="/confirmation"
+          element={<p>merci pour votre commande</p>}
+        />
+      </Routes>
     </MemoryRouter>,
   );
 
 describe("Payment", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+    useSessionMock.mockReturnValue(session(client));
   });
 
   afterEach(() => {
@@ -67,7 +101,9 @@ describe("Payment", () => {
 
     // 4500 centimes en base → 45,00 € à l'écran.
     expect(await screen.findByText("45.00 €")).toBeInTheDocument();
-    expect(screen.getByTestId("bouton-payer")).toHaveTextContent("45.00 €");
+    expect(
+      screen.getByRole("button", { name: "Payer 45.00 €" }),
+    ).toBeInTheDocument();
   });
 
   it("affiche le message du serveur quand le panier est vide", async () => {
@@ -80,5 +116,50 @@ describe("Payment", () => {
     expect(
       await screen.findByText("Votre panier est vide."),
     ).toBeInTheDocument();
+  });
+
+  it("emmène à la confirmation une fois la réservation enregistrée", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ clientSecret: "cs_test", amount: 4500 }, 200),
+    );
+
+    renderPayment();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /payer/i }));
+
+    expect(
+      await screen.findByText("merci pour votre commande"),
+    ).toBeInTheDocument();
+  });
+
+  it("explique la situation quand la session a disparu, au lieu de ne rien faire", async () => {
+    useSessionMock.mockReturnValue(session(null));
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ clientSecret: "cs_test", amount: 4500 }, 200),
+    );
+
+    renderPayment();
+
+    expect(
+      await screen.findByText(
+        "Votre session a expiré. Reconnectez-vous pour finaliser votre commande.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("ne vide plus le panier depuis le navigateur (le serveur le fait)", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ clientSecret: "cs_test", amount: 4500 }, 200),
+    );
+
+    renderPayment();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /payer/i }));
+    await screen.findByText("merci pour votre commande");
+
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => url.includes("/api/cart"))).toBe(false);
   });
 });

@@ -29,7 +29,7 @@ interface CardEventProps {
 }
 
 function CardEvent({ event, participants }: CardEventProps) {
-  const { user } = useSession();
+  const { user, loading } = useSession();
 
   const capacity = event.capacity;
   const sumParticipants = participants?.sum_participants ?? 0;
@@ -48,7 +48,7 @@ function CardEvent({ event, participants }: CardEventProps) {
   const isCreator = user && user.id === event.creator_id;
 
   const message =
-    !user && showLoginMessage
+    !loading && !user && showLoginMessage
       ? "Veuillez vous connecter pour vous inscrire"
       : user && isFull
         ? "Désolé, cet évènement est complet"
@@ -60,6 +60,10 @@ function CardEvent({ event, participants }: CardEventProps) {
   const isActive = !isVisualDisabled;
 
   function handleRegisterClick() {
+    // Session pas encore connue : ne rien affirmer, ni « connectez-vous » ni
+    // l'ouverture du formulaire.
+    if (loading) return;
+
     if (!user) {
       setShowLoginMessage(true);
       setIsForm(false);

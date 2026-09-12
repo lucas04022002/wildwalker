@@ -6,11 +6,6 @@ import { apiFetch } from "../../hooks/apiFetch";
 import useCart from "../../hooks/useCart";
 import type { CartItem } from "../../types/cart";
 
-const PROMO_CODES: Record<string, number> = {
-  PROMO10: 10,
-  PROMO15: 15,
-};
-
 const formatHour = (hour: string) => {
   const [hours, minutes = "00"] = hour.split(":");
   return `${hours.padStart(2, "0")}:${minutes}`;
@@ -20,39 +15,19 @@ function Cart() {
   const cart = useCart();
   const [carts, setCarts] = useState<CartItem[]>(cart);
   const [message, setMessage] = useState("");
-  const [promoCode, setPromoCode] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [promoMessage, setPromoMessage] = useState("");
 
-  const applyPromo = () => {
-    const code = promoCode.trim().toUpperCase();
-
-    if (PROMO_CODES[code]) {
-      const percentage = PROMO_CODES[code];
-      setDiscount(percentage);
-      setPromoMessage(`Code appliqué : -${percentage}%`);
-    } else {
-      setDiscount(0);
-      setPromoMessage("Code invalide");
-    }
-  };
-
+  // Même calcul que celui du serveur : c'est lui qui fera foi au paiement,
+  // donc l'écran ne doit annoncer aucun autre montant.
   const totalPrice = carts.reduce(
     (total, item) => total + Number(item.price_unit) * item.quantity,
     0,
   );
 
-  const discountAmount = (totalPrice * discount) / 100;
-  const discountedTotal = totalPrice - discountAmount;
   useEffect(() => {
     if (cart.length > 0) {
       setCarts(cart);
     }
   }, [cart]);
-
-  useEffect(() => {
-    console.log(carts);
-  }, [carts]);
 
   const increaseQuantity = async (id: number) => {
     const item = carts.find((i) => i.id === id);
@@ -213,44 +188,9 @@ function Cart() {
             <span>{totalPrice.toFixed(2)} €</span>
           </div>
 
-          {discount > 0 && (
-            <div className="cart-summary-row cart-summary-discount">
-              <span>Remise -{discount}%</span>
-              <span>-{discountAmount.toFixed(2)} €</span>
-            </div>
-          )}
-
-          <div className="cart-summary-total">
+          <div className="cart-summary-total" data-testid="cart-total">
             <span>Total TTC</span>
-            <span>{discountedTotal.toFixed(2)} €</span>
-          </div>
-
-          <div className="cart-promo-section">
-            <label htmlFor="promo">Code promo</label>
-
-            <div className="cart-promo-field">
-              <input
-                id="promo"
-                type="text"
-                placeholder="Saisissez votre code..."
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && applyPromo()}
-              />
-              <button type="button" onClick={applyPromo}>
-                Appliquer
-              </button>
-            </div>
-
-            {promoMessage && (
-              <p
-                className={
-                  discount > 0 ? "cart-promo-success" : "cart-promo-error"
-                }
-              >
-                {promoMessage}
-              </p>
-            )}
+            <span>{totalPrice.toFixed(2)} €</span>
           </div>
 
           {/* Aucun montant ni panier transmis : la page de paiement demande

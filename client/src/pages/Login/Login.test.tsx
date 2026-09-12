@@ -53,9 +53,12 @@ describe("Login", () => {
     renderLogin();
     await fillAndSubmit();
 
-    expect(
-      await screen.findByText("Email ou mot de passe incorrect."),
-    ).toBeInTheDocument();
+    const erreur = await screen.findByText("Email ou mot de passe incorrect.");
+    expect(erreur).toBeInTheDocument();
+    // Annoncé aux lecteurs d'écran : le message apparaît sans changement de page.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Email ou mot de passe incorrect.",
+    );
   });
 
   it("n'écrit aucun jeton dans le stockage du navigateur après une connexion", async () => {
@@ -128,6 +131,52 @@ describe("Login", () => {
     expect(await screen.findByText("panier")).toBeInTheDocument();
   });
 
+  it("ignore un `from` réservé aux admins quand c'est un client qui se connecte", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ user: { id: 7, role: "client" } }, 200),
+    );
+
+    renderLogin({
+      pathname: "/log-in",
+      state: { from: { pathname: "/dashboard-admin" } },
+    });
+    await fillAndSubmit();
+
+    // Le client repart chez lui, pas vers une page qu'il ne peut pas voir.
+    expect(
+      await screen.findByText("tableau de bord client"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("tableau de bord admin")).not.toBeInTheDocument();
+  });
+
+  it("suit le rôle renvoyé par le serveur, pas l'onglet choisi", async () => {
+    // Onglet « Client », mais le serveur répond qu'il s'agit d'un admin.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ user: { id: 1, role: "admin" } }, 200),
+    );
+
+    renderLogin();
+    await fillAndSubmit();
+
+    expect(
+      await screen.findByText("tableau de bord admin"),
+    ).toBeInTheDocument();
+  });
+
+  it("refuse de deviner la destination si le serveur n'annonce pas de rôle", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ user: { id: 7 } }, 200));
+
+    renderLogin();
+    await fillAndSubmit();
+
+    expect(
+      await screen.findByText("Réponse inattendue du serveur."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("tableau de bord client"),
+    ).not.toBeInTheDocument();
+  });
+
   it("affiche le message d'inscription transmis par la page de création de compte", () => {
     renderLogin({
       pathname: "/log-in",
@@ -137,6 +186,9 @@ describe("Login", () => {
     expect(
       screen.getByText("Si l'adresse est disponible, le compte est créé."),
     ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Si l'adresse est disponible, le compte est créé.",
+    );
   });
 
   it("signale une panne réseau sans laisser le bouton bloqué", async () => {

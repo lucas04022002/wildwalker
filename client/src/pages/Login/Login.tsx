@@ -14,6 +14,9 @@ type LoginState = {
   notice?: string;
 };
 
+/** Préfixes réservés aux administrateurs. */
+const ADMIN_PATHS = ["/dashboard-admin"];
+
 /**
  * N'accepte qu'un chemin interne. Une valeur venant de l'historique de
  * navigation ne doit jamais pouvoir devenir une redirection vers un autre
@@ -21,6 +24,21 @@ type LoginState = {
  */
 const safePath = (pathname?: string): string | null =>
   pathname?.startsWith("/") && !pathname.startsWith("//") ? pathname : null;
+
+/**
+ * Destination après connexion.
+ *
+ * Le rôle vient du serveur, jamais de l'onglet choisi : c'est lui qui décide
+ * qui l'utilisateur est. On ne renvoie vers `from` que si ce chemin est
+ * compatible avec ce rôle, sinon la garde de route le refuserait aussitôt et
+ * l'utilisateur se retrouverait sur l'accueil sans comprendre.
+ */
+const destinationFor = (role: "client" | "admin", from: string | null) => {
+  if (role === "admin") return "/dashboard-admin";
+
+  const interdit = ADMIN_PATHS.some((prefix) => from?.startsWith(prefix));
+  return from && !interdit ? from : "/dashboard-client";
+};
 
 export default function Login() {
   const [tab, setTab] = useState<Tab>("client");
@@ -57,17 +75,20 @@ export default function Login() {
         return;
       }
 
+      const role = data.user?.role;
+
+      if (role !== "client" && role !== "admin") {
+        setError("Réponse inattendue du serveur.");
+        return;
+      }
+
       // Aucun jeton à ranger : la session est un cookie httpOnly posé par le
       // serveur, invisible pour ce code.
       await refresh();
 
-      const role = data.user?.role ?? tab;
-      const destination =
-        role === "admin"
-          ? "/dashboard-admin"
-          : (safePath(state?.from?.pathname) ?? "/dashboard-client");
-
-      navigate(destination, { replace: true });
+      navigate(destinationFor(role, safePath(state?.from?.pathname)), {
+        replace: true,
+      });
     } catch {
       setError("Impossible de contacter le serveur.");
     } finally {
@@ -98,9 +119,13 @@ export default function Login() {
         <form className="auth-form-wrapper" onSubmit={handleSubmit}>
           <h1 className="auth-title">Saisissez vos identifiants</h1>
 
-          {notice && !error && <p className="auth-notice">{notice}</p>}
+          {/* <output> a le rôle ARIA « status » d'origine : le message est
+              annoncé aux lecteurs d'écran alors que la page ne change pas. */}
+          {notice && !error && (
+            <output className="auth-notice">{notice}</output>
+          )}
 
-          {error && <p className="auth-error">{error}</p>}
+          {error && <output className="auth-error">{error}</output>}
 
           <div className="auth-fields">
             <div className="auth-field">
