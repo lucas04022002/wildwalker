@@ -3,7 +3,12 @@ import { Navigate, useLocation } from "react-router";
 import { useSession } from "../hooks/useSession";
 
 type RequireRoleProps = {
-  role: "client" | "admin";
+  /**
+   * Nommé `requiredRole` (et non `role`) pour ne pas ressembler à l'attribut
+   * ARIA du même nom : Biome (`a11y/useValidAriaRole`) validerait sinon sa
+   * valeur comme un rôle ARIA et la rejetterait à tort sur un composant.
+   */
+  requiredRole: "client" | "admin";
   children: ReactNode;
 };
 
@@ -17,7 +22,7 @@ type RequireRoleProps = {
  * Cette garde ne protège que l'affichage. Les données, elles, sont protégées
  * par le serveur : chaque route de l'API vérifie la session et le rôle.
  */
-function RequireRole({ role, children }: RequireRoleProps) {
+function RequireRole({ requiredRole, children }: RequireRoleProps) {
   const { user, loading } = useSession();
   const location = useLocation();
 
@@ -28,7 +33,7 @@ function RequireRole({ role, children }: RequireRoleProps) {
     return <Navigate to="/log-in" state={{ from: location }} replace />;
   }
 
-  if (user.role !== role) return <Navigate to="/" replace />;
+  if (user.role !== requiredRole) return <Navigate to="/" replace />;
 
   return <>{children}</>;
 }

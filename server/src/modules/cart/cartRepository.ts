@@ -118,13 +118,4 @@ const destroy = async (cartItemId: number, userId: number) => {
   return result.affectedRows;
 };
 
-const destroyAll = async (userId: number) => {
-  const [result] = await databaseClient.query<ResultSetHeader>(
-    "DELETE FROM cart WHERE users_id = ?",
-    [userId],
-  );
-
-  return result.affectedRows;
-};
-
-export default { readAll, create, updateQuantity, destroy, destroyAll };
+export default { readAll, create, updateQuantity, destroy };

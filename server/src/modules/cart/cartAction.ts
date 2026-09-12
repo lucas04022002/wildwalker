@@ -164,23 +164,4 @@ const destroy: RequestHandler = async (req, res, next) => {
   }
 };
 
-// DestroyAll — DELETE /api/cart/user/:userId
-// Vide le panier de l'utilisateur connecté (ex: après paiement).
-// Le `:userId` de l'URL est ignoré, le client sera nettoyé à la tâche 3.
-const destroyAll: RequestHandler = async (req, res, next) => {
-  try {
-    const userId = currentUserId(req);
-
-    if (userId == null) {
-      res.status(401).json({ message: "Veuillez vous connecter." });
-      return;
-    }
-
-    await cartRepository.destroyAll(userId);
-    res.sendStatus(204);
-  } catch (err) {
-    next(err);
-  }
-};
-
-export default { browse, addEvent, edit, destroy, destroyAll };
+export default { browse, addEvent, edit, destroy };

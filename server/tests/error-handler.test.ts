@@ -17,7 +17,6 @@ jest.mock("../src/modules/cart/cartRepository", () => ({
     create: jest.fn(),
     updateQuantity: jest.fn(),
     destroy: jest.fn(),
-    destroyAll: jest.fn(),
   },
 }));
 

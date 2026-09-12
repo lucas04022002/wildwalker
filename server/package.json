@@ -1,5 +1,8 @@
 {
-  "name": "@js-monorepo/server",
+  "name": "@wildwalker/server",
+  "description": "API Express/MySQL de WildWalker (auth, panier, réservations, paiement Stripe, tableaux de bord).",
+  "author": "Équipe WildWalker — Wild Code School (maintainer: Lucas Guilhot)",
+  "license": "MIT",
   "scripts": {
     "build": "tsc && node scripts/copy-sql.mjs",
     "check-types": "tsc --noEmit",

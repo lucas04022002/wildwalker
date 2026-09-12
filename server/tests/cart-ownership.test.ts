@@ -23,7 +23,6 @@ jest.mock("../src/modules/cart/cartRepository", () => ({
     create: jest.fn(async () => 11),
     updateQuantity: jest.fn(async () => 0),
     destroy: jest.fn(async () => 0),
-    destroyAll: jest.fn(async () => 1),
   },
 }));
 
@@ -112,15 +111,6 @@ describe("propriété des lignes de panier", () => {
 
     expect(res.status).toBe(404);
     expect(cartRepository.destroy).toHaveBeenCalledWith(5, clientUser.id);
-  });
-
-  test("DELETE /api/cart/user/:userId ne vide que le panier du jeton", async () => {
-    const res = await request(app)
-      .delete(`/api/cart/user/${OTHER_USER_ID}`)
-      .set("Cookie", sessionCookie(clientUser));
-
-    expect(res.status).toBe(204);
-    expect(cartRepository.destroyAll).toHaveBeenCalledWith(clientUser.id);
   });
 
   test("POST /api/cart utilise l'utilisateur du jeton, pas users_id du body", async () => {

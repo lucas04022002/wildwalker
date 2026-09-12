@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import type { RouteObject } from "react-router";
 import { RouterProvider, createBrowserRouter } from "react-router";
@@ -20,24 +19,17 @@ import Cart from "./pages/cart/Cart";
 import SignIn from "./pages/signIn/SignIn";
 
 /**
- * Enveloppe une page dans la garde de rôle.
- *
- * Le rôle passe par une variable plutôt que par un attribut littéral : le nom
- * de la prop (`role`) fait sinon croire à Biome qu'il s'agit de l'attribut
- * ARIA du même nom, et la règle `a11y/useValidAriaRole` se déclenche à tort.
- */
-const guarded = (role: "client" | "admin", page: ReactNode) => (
-  <RequireRole role={role}>{page}</RequireRole>
-);
-
-/**
  * Table des routes, exportée pour que les tests puissent vérifier que les
  * pages protégées le sont réellement, sans monter toute l'application.
  */
 export const routes: RouteObject[] = [
   {
     path: "/invoice/:bookingId",
-    element: guarded("client", <InvoicePage />),
+    element: (
+      <RequireRole requiredRole="client">
+        <InvoicePage />
+      </RequireRole>
+    ),
   },
   {
     element: <App />,
@@ -56,15 +48,27 @@ export const routes: RouteObject[] = [
       },
       {
         path: "/dashboard-client",
-        element: guarded("client", <DashboardClientPage />),
+        element: (
+          <RequireRole requiredRole="client">
+            <DashboardClientPage />
+          </RequireRole>
+        ),
       },
       {
         path: "/cart",
-        element: guarded("client", <Cart />),
+        element: (
+          <RequireRole requiredRole="client">
+            <Cart />
+          </RequireRole>
+        ),
       },
       {
         path: "/dashboard-admin",
-        element: guarded("admin", <DashboardAdminPage />),
+        element: (
+          <RequireRole requiredRole="admin">
+            <DashboardAdminPage />
+          </RequireRole>
+        ),
       },
       {
         path: "/workshop-page",
@@ -72,11 +76,19 @@ export const routes: RouteObject[] = [
       },
       {
         path: "/payment",
-        element: guarded("client", <Payment />),
+        element: (
+          <RequireRole requiredRole="client">
+            <Payment />
+          </RequireRole>
+        ),
       },
       {
         path: "/confirmation",
-        element: guarded("client", <Confirmation />),
+        element: (
+          <RequireRole requiredRole="client">
+            <Confirmation />
+          </RequireRole>
+        ),
       },
       {
         path: "/log-in",

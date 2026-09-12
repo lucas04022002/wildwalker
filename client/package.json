@@ -1,5 +1,8 @@
 {
-  "name": "@js-monorepo/client",
+  "name": "@wildwalker/client",
+  "description": "Interface React de WildWalker (espaces, événements, panier, paiement, tableaux de bord client/admin).",
+  "author": "Équipe WildWalker — Wild Code School (maintainer: Lucas Guilhot)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "check-types": "tsc --noEmit",
@@ -13,7 +16,6 @@
     "@stripe/stripe-js": "^9.8.0",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
-    "multer": "^2.1.1",
     "react": "^19.1.0",
     "react-calendar": "^6.0.1",
     "react-dom": "^19.1.0",
@@ -24,7 +26,6 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
-    "@types/multer": "^2.1.0",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",

@@ -199,13 +199,6 @@ router.delete(
   cartActions.destroy,
 );
 
-// clear the cart of a user (le `:userId` de l'URL est ignoré)
-router.delete(
-  "/api/cart/user/:userId",
-  authMiddleware.requireAuth,
-  cartActions.destroyAll,
-);
-
 /* ************************************************************************* */
 // Create Event (protégé admin)
 /* ************************************************************************* */

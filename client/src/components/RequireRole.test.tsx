@@ -36,7 +36,7 @@ const renderGuard = (role: "client" | "admin" = "client") =>
         <Route
           path="/cart"
           element={
-            <RequireRole role={role}>
+            <RequireRole requiredRole={role}>
               <p>contenu protégé</p>
             </RequireRole>
           }
@@ -82,7 +82,7 @@ describe("RequireRole", () => {
           <Route
             path="/cart"
             element={
-              <RequireRole role={role}>
+              <RequireRole requiredRole={role}>
                 <p>contenu protégé</p>
               </RequireRole>
             }
