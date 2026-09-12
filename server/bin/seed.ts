@@ -1,87 +1,70 @@
-// Load environment variables from .env file
+// Charge les variables d'environnement depuis .env
 import "dotenv/config";
 
 import fs from "node:fs";
 import path from "node:path";
 
-// Import database client
-import database from "../database/client";
+import type { Pool, PoolConnection } from "mysql2/promise";
 
-import type { AbstractSeeder } from "../database/fixtures/AbstractSeeder";
+import { assertNotDestructive, createMigrationPool } from "./migrate";
 
-const fixturesPath = path.join(__dirname, "../database/fixtures");
+/**
+ * Chargement des données de démonstration.
+ *
+ * Le seed est du DML pur (des `INSERT`) : la transaction est ici réelle,
+ * un échec n'insère rien. Il s'exécute sur une base fraîchement migrée ;
+ * relancé sur une base déjà remplie il échoue sur les clés uniques, ce qui
+ * est voulu (on ne veut ni doublon ni suppression silencieuse).
+ */
 
-const seed = async () => {
-  try {
-    const dependencyMap: { [key: string]: AbstractSeeder } = {};
+const SEED_FILE = path.join(__dirname, "..", "database", "seed.sql");
 
-    // Construct each seeder
-    const filePaths = fs
-      .readdirSync(fixturesPath)
-      .filter((filePath: string) => !filePath.startsWith("Abstract"));
-
-    for (const filePath of filePaths) {
-      const { default: SeederClass } = await import(
-	`file://${path.join(fixturesPath, filePath)}`
-      );
-
-      const seeder = new SeederClass() as AbstractSeeder;
-
-      dependencyMap[SeederClass.toString()] = seeder;
-    }
-
-    // Sort seeders according to their dependencies
-    const sortedSeeders: AbstractSeeder[] = [];
-
-    // The recursive solver
-    const solveDependencies = (n: AbstractSeeder) => {
-      for (const DependencyClass of n.dependencies) {
-        const dependency = dependencyMap[DependencyClass.toString()];
-
-        if (!sortedSeeders.includes(dependency)) {
-          solveDependencies(dependency);
-        }
-      }
-
-      if (!sortedSeeders.includes(n)) {
-        sortedSeeders.push(n);
-      }
-    };
-
-    // Solve dependencies for each seeder
-    for (const seeder of Object.values(dependencyMap)) {
-      solveDependencies(seeder);
-    }
-
-    // Truncate tables (starting from the depending ones)
-
-    for (const seeder of sortedSeeders.toReversed()) {
-      // Use delete instead of truncate to bypass foreign key constraint
-      // Wait for the delete promise to complete
-      await database.query(`delete from ${seeder.table}`);
-    }
-
-    // Run each seeder
-
-    for (const seeder of sortedSeeders) {
-      await seeder.run();
-
-      // Wait for all the insertion promises to complete
-      // We do want to wait in order to satisfy dependencies
-      await Promise.all(seeder.promises);
-    }
-
-    // Close the database connection
-    database.end();
-
-    console.info(
-      `${process.env.DB_NAME} filled from '${path.normalize(fixturesPath)}' 🌱`,
+const assertSeedAllowed = (): void => {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_SEED !== "1") {
+    throw new Error(
+      "Seed refusé en production. Relancez avec ALLOW_SEED=1 si vous voulez vraiment injecter les données de démonstration.",
     );
-  } catch (err) {
-    const { message, stack } = err as Error;
-    console.error("Error filling the database:", message, stack);
   }
 };
 
-// Run the seed function
-seed();
+/** Charge le fichier de seed dans une transaction. */
+const runSeed = async (pool: Pool, file: string): Promise<void> => {
+  assertSeedAllowed();
+
+  const sql = fs.readFileSync(file, "utf8");
+  assertNotDestructive(sql, path.basename(file));
+
+  const connection: PoolConnection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    await connection.query(sql);
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    const { message } = err as Error;
+    throw new Error(`Échec du seed ${path.basename(file)} : ${message}`);
+  } finally {
+    connection.release();
+  }
+};
+
+const main = async (): Promise<void> => {
+  const pool = createMigrationPool();
+
+  try {
+    await runSeed(pool, SEED_FILE);
+    console.info(`Données de démonstration chargées depuis ${SEED_FILE}`);
+  } finally {
+    await pool.end();
+  }
+};
+
+if (require.main === module) {
+  main().catch((err: Error) => {
+    console.error(`Seed impossible : ${err.message}`);
+    process.exitCode = 1;
+  });
+}
+
+export { runSeed, assertSeedAllowed, SEED_FILE };

@@ -1,12 +1,12 @@
 {
   "name": "@js-monorepo/server",
   "scripts": {
+    "build": "tsc && node scripts/copy-sql.mjs",
     "check-types": "tsc --noEmit",
-    "dev": "tsx watch --clear-screen=false ./src/main",
     "db:migrate": "tsx ./bin/migrate",
     "db:seed": "tsx ./bin/seed",
-    "build": "tsx ./bin/migrate",
-    "start": "tsx ./src/main",
+    "dev": "tsx watch --clear-screen=false ./src/main",
+    "start": "node dist/src/main.js",
     "test": "jest --verbose"
   },
   "dependencies": {

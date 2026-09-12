@@ -77,8 +77,11 @@ Il est pré-configuré avec un ensemble d'outils pour aider les étudiants à pr
 | Commande               | Description                                                                 |
 |------------------------|-----------------------------------------------------------------------------|
 | `npm install`          | Installe les dépendances pour le client et le serveur                       |
-| `npm run db:migrate`   | Met à jour la base de données à partir d'un schéma défini                   |
+| `npm run db:migrate`   | Applique les migrations non encore jouées (ne détruit jamais rien)          |
+| `npm run db:seed`      | Charge les données de démonstration (refusé en production sans `ALLOW_SEED=1`) |
 | `npm run dev`          | Démarre les deux serveurs (client et serveur) dans un seul terminal         |
+| `npm run build`        | Compile le client et le serveur (`server/dist`)                             |
+| `npm start`            | Démarre le serveur compilé (`node dist/src/main.js`)                        |
 | `npm run check`        | Exécute les outils de validation (linting et formatage)                     |
 | `npm run test`         | Exécute les tests unitaires et d'intégration                                |
 
@@ -97,9 +100,15 @@ my-project/
 │   │   ├── app.ts
 │   │   ├── main.ts
 │   │   └── router.ts
+│   ├── bin/
+│   │   ├── migrate.ts
+│   │   ├── seed.ts
+│   │   └── hash-demo-passwords.ts
 │   ├── database/
 │   │   ├── client.ts
-│   │   └── schema.sql
+│   │   ├── migrations/
+│   │   │   └── 0001_init.sql
+│   │   └── seed.sql
 │   ├── tests/
 │   ├── .env
 │   └── .env.sample
@@ -115,58 +124,75 @@ my-project/
 
 ### Mettre en place la base de données
 
-**Créer et remplir le fichier `.env`** dans le dossier `server` :
+> Section provisoire : le README complet (présentation, captures, architecture,
+> déploiement) arrive à la fin de la refonte.
+
+**1. Créer et remplir `server/.env`** à partir de `server/.env.sample` :
 
 ```plaintext
+APP_PORT=3310
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=not_root
 DB_PASSWORD=password
-DB_NAME=my_database
+DB_NAME=wildwalker
+ALLOW_SEED=
+JWT_SECRET=une_longue_chaine_aleatoire
+CLIENT_URL=http://localhost:3000
 ```
 
-**Les variables sont utilisés** dans `server/database/client.ts` :
+La base (`CREATE DATABASE wildwalker;`) doit exister : les migrations ne la
+créent pas, et surtout ne la suppriment jamais.
 
-```typescript
-const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
-
-import mysql from "mysql2/promise";
-
-const client = mysql.createPool({
-  host: DB_HOST,
-  port: DB_PORT as number | undefined,
-  user: DB_USER,
-  password: DB_PASSWORD,
-  database: DB_NAME,
-});
-
-export default client;
-```
-
-**Créer une table** dans `server/database/schema.sql` :
-
-```sql
-CREATE TABLE item (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  title VARCHAR(255) NOT NULL,
-  user_id INT NOT NULL,
-  FOREIGN KEY(user_id) REFERENCES user(id)
-);
-```
-
-**Insérer des données** dans `server/database/schema.sql` :
-
-```sql
-INSERT INTO item (title, user_id) VALUES
-  ('Sample Item 1', 1),
-  ('Sample Item 2', 2);
-```
-
-**Synchroniser la BDD avec le schema** :
+**2. Appliquer les migrations** :
 
 ```sh
 npm run db:migrate
 ```
+
+Le runner (`server/bin/migrate.ts`) joue les fichiers de
+`server/database/migrations/` dans l'ordre lexical, une seule fois chacun, et
+note chaque fichier appliqué dans la table `schema_migrations`. Il est sûr à
+relancer : rien n'est supprimé, rien n'est rejoué. Un fichier qui contiendrait
+`DROP DATABASE`, `DROP TABLE` ou `TRUNCATE` est refusé.
+
+Pour faire évoluer le schéma, on **ajoute** un fichier
+(`0002_ma_modification.sql`), on ne modifie jamais un fichier déjà appliqué.
+
+**3. Charger les données de démonstration** (optionnel, sur une base
+fraîchement migrée) :
+
+```sh
+npm run db:seed
+```
+
+`server/database/seed.sql` remplit les espaces, créneaux, comptes, activités,
+réservations et réclamations. En `NODE_ENV=production`, le seed refuse de
+tourner tant que `ALLOW_SEED=1` n'est pas positionné.
+
+#### Comptes de démonstration
+
+Mots de passe volontairement publics (dépôt de démonstration) :
+
+| Rôle     | Exemple d'identifiant       | Mot de passe       |
+|----------|-----------------------------|--------------------|
+| Admin    | `nina.richard@lelocal.fr`   | `demo-admin-2026`  |
+| Client   | `lucie.marie655@voila.fr`   | `demo-client-2026` |
+
+Les 2 comptes `admin` et les 25 comptes `client` du seed partagent ces deux
+mots de passe. Pour les changer : modifier `server/bin/hash-demo-passwords.ts`,
+lancer `npx tsx bin/hash-demo-passwords.ts` depuis `server/`, puis commiter le
+`seed.sql` obtenu.
+
+#### Construire et lancer le serveur compilé
+
+```sh
+npm run build --workspace=server   # tsc -> server/dist (+ copie des .sql)
+npm start                          # node dist/src/main.js
+```
+
+Sans configuration ou sans MySQL joignable, le serveur s'arrête avec un message
+explicite et un code de sortie 1.
 
 ### Développer la partie back-end
 

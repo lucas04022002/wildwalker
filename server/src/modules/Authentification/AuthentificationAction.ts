@@ -94,7 +94,7 @@ const loginWithRole = async (
     return;
   }
 
-  const { password: _password, fortgot_password: _fortgot, ...safeUser } = user;
+  const { password: _password, ...safeUser } = user;
   const token = jwtUtil.signToken({
     id: user.id,
     email: user.email,

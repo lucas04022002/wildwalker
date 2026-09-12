@@ -1,18 +1,20 @@
-DROP TABLE IF EXISTS `cart`;
-DROP TABLE IF EXISTS `space`;
+-- WildWalker — données de démonstration.
+--
+-- Chargé par `npm run db:seed` sur une base fraîchement migrée. Ce fichier
+-- n'est PAS une migration : il n'est jamais joué automatiquement, et
+-- `npm run db:seed` refuse de tourner avec NODE_ENV=production tant que
+-- ALLOW_SEED=1 n'est pas positionné.
+--
+-- Comptes de démonstration (mots de passe documentés dans le README) :
+--   * les 2 comptes `admin`  : demo-admin-2026
+--   * les 25 comptes `client`: demo-client-2026
+-- Les hashes argon2id ci-dessous sont régénérés par `bin/hash-demo-passwords.ts`.
+--
+-- Ordre d'insertion imposé par les clés étrangères :
+-- space -> time_slot -> users -> activity -> booking -> claim.
 
-CREATE TABLE `space` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `space_name` varchar(255) NOT NULL,
-  `description` text NOT NULL,
-  `capacity` int NOT NULL,
-  `url_image` varchar(255) NOT NULL,
-  `price_unit` decimal(10,2) NOT NULL,
-  `space_type` varchar(45) NOT NULL,
-  `space_category` varchar(50) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- space
 INSERT INTO `space` VALUES 
 (1,'L\'Atrium','Openspace lumineux à capacité réduite, idéal pour celles et ceux qui recherchent un environnement de travail plus calme tout en bénéficiant de la vie du Local.',20,'/assets/images/spaces/openspace/atrium.png',8.00,'Coworking','Openspace'),
 (2,'Le Parvis','Openspace accueillant et accessible, proposant une ambiance sereine et un nombre limité de postes pour un confort de travail optimal.',20,'/assets/images/spaces/openspace/parvis.png',8.00,'Coworking','Openspace'),
@@ -38,90 +40,45 @@ INSERT INTO `space` VALUES
 (22,'La Serre','Espace détente du Local, chaleureux et végétalisé, offrant un environnement calme et ressourçant pour se relaxer, discuter ou simplement souffler au cœur de la journée.',50,'/assets/images/spaces/break-room/serre.png',0,'Détente','Salle détente');
 
 
-DROP TABLE IF EXISTS `time_slot`;
-
-CREATE TABLE `time_slot` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `slot` varchar(255) NOT NULL,
-  `start_hour` time NOT NULL,
-  `end_hour` time NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-
+-- time_slot
 INSERT INTO `time_slot` VALUES (1,'Matin','08:00:00','14:00:00'),(2,'Après-midi','14:00:00','20:00:00'),(3,'Soir','20:00:00','00:00:00'),(4,'Journée','8:00:00','20:00:00');
 
-DROP TABLE IF EXISTS `users`;
 
-CREATE TABLE `users` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `phone_number` varchar(45) NOT NULL,
-  `email` varchar(150) NOT NULL,
-  `lastname` varchar(150) NOT NULL,
-  `password` varchar(255) NOT NULL,
-  `fortgot_password` varchar(255) NOT NULL,
-  `city` varchar(150) DEFAULT NULL,
-  `adress` varchar(255) DEFAULT NULL,
-  `role` varchar(20) NOT NULL,
-  `profile_image` text,
-  `firstname` varchar(150) NOT NULL,
-  `signing_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `email_UNIQUE` (`email`),
-  UNIQUE KEY `phone_number_UNIQUE` (`phone_number`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- users
+INSERT INTO `users`
+  (`id`, `phone_number`, `email`, `lastname`, `password`,
+   `city`, `adress`, `role`, `profile_image`, `firstname`, `signing_date`)
+VALUES
+(1,'0123456789','nina.richard@lelocal.fr','Richard','$argon2id$v=19$m=65536,t=3,p=4$N+wD5mrK+XH2e3rRcrwucQ$KXHxeU1z915T661qt/crGgxVTLBvpYCp3G6gnJ45nI4',NULL,NULL,'admin',NULL,'Nina','2026-05-01 00:00:00'),
+(2,'0611223344','admin2@lelocal.fr','Dupont','$argon2id$v=19$m=65536,t=3,p=4$QjQzyJ++pP0BHyDvYp7EbQ$H8EXR2hg+AV9fmWSFaYd30VnXVW+97c6A5lU8qY7cjI',NULL,NULL,'admin',NULL,'Julie','2026-06-22 00:00:00'),
+(3,'0604332181','lucie.marie655@voila.fr','Marie','$argon2id$v=19$m=65536,t=3,p=4$PXFAg96xqak79R0XLL82Vw$ntjbVdNxVz48MsE7ragOIcNmayeZjeOqUjJZzsiuqz8','Moulin','91, boulevard Briand','client',NULL,'Lucie','2026-01-06 22:38:26'),
+(4,'0613389083','éric.carpentier33@orange.fr','Carpentier','$argon2id$v=19$m=65536,t=3,p=4$s/Hj//jKcrmMEL9mzIei7Q$+xxbo4bJD8csk/r7eiMaoE+ReAZock45izPDdxSIHaU','MarionVille','78, avenue Pruvost','client','/assets/images/profiles/user_4.png','Éric','2026-02-22 00:31:11'),
+(5,'0737940265','aimé.thierry719@free.fr','Thierry','$argon2id$v=19$m=65536,t=3,p=4$GyzIK6+bbQCPil/ZDufY7Q$juMlxhs2FtqIVVgD6g+cbS0suD4r0FDhXkkskQumV8k','Leblanc-la-Forêt','25, avenue Pereira','client',NULL,'Aimé','2026-03-09 03:05:58'),
+(6,'0711615594','adélaïde.texier221@bouygtel.fr','Texier','$argon2id$v=19$m=65536,t=3,p=4$f0odNepYlCGszOd86NVJFA$AFS659HYfluHL8m9p1PxWQcydiZkvwSF0lRYT9SZ2DE','Sainte Élise','rue Françoise Cousin','client','/assets/images/profiles/user_6.png','Adélaïde','2026-06-05 02:22:05'),
+(7,'0781618495','laure.étienne748@sfr.fr','Étienne','$argon2id$v=19$m=65536,t=3,p=4$vs802rbm1fCfAMH/k6zxUw$79NE1sD8dt0v5vtfaiET8vfN0Ju6McOrsxdONz8z9wk','Saint Margaud-sur-Mer','4, avenue Lopes','client',NULL,'Laure','2026-03-26 18:54:19'),
+(8,'0603413164','victoire.marchal722@free.fr','Marchal','$argon2id$v=19$m=65536,t=3,p=4$nsrKecHg6qRrMWXIy//6nw$ptaSOp/5OaGTbFFFd5L8EUTwU+GDafMuiiQpJLWwqd0','Monnier','31, rue de Goncalves','client',NULL,'Victoire','2026-03-28 10:37:25'),
+(9,'0725534192','richard.riou855@orange.fr','Riou','$argon2id$v=19$m=65536,t=3,p=4$T/G5N7lWlExvV9oJSOZKuw$kY7sXiQDwV1Vbld0yZtDVKY/B/cIn3uPQqCKwkspdKQ','Lecoq','rue Gomes','client',NULL,'Richard','2026-03-17 00:25:39'),
+(10,'0676483503','christophe.lecomte251@dbmail.com','Lecomte','$argon2id$v=19$m=65536,t=3,p=4$13srgbjHWETfHfe3DriKvg$7TQQ/zdUO/dnUUOLm0nSiYzY2U6XSCmDoyLfLuNSrks','Bègue','37, rue Paul Vallet','client','/assets/images/profiles/user_10.png','Christophe','2026-04-15 23:25:12'),
+(11,'0764139537','rémy.letellier825@noos.fr','Letellier','$argon2id$v=19$m=65536,t=3,p=4$aRWtG0IYzZeDyOCL9mNYNg$hfvirL8lO679j5jqG5GyUoMTyLy7yC/LjxxQnfIQslg','Alexandre-sur-Étienne','88, rue Masson','client',NULL,'Rémy','2026-01-29 13:57:06'),
+(12,'0724238849','hugues.bazin937@noos.fr','Bazin','$argon2id$v=19$m=65536,t=3,p=4$LwyZ9Tupf/kPM9QHGHXctA$SrgjpIxYXHWRJ1xCRll2WJYlPXZGVXfzi1QA0L+w8Gk','Andre-sur-Collin','578, rue de Bazin','client',NULL,'Hugues','2026-05-15 18:35:58'),
+(13,'0753287101','maggie.regnier598@bouygtel.fr','Regnier','$argon2id$v=19$m=65536,t=3,p=4$gw27+wxJEovImwrIvr63rA$kdPA+j08YDFePC/zz196sEz3qHfPrZKckusjDVe+ak4','Marie','82, chemin Charrier','client',NULL,'Maggie','2026-05-23 11:41:10'),
+(14,'0791669784','corinne.gautier164@club-internet.fr','Gautier','$argon2id$v=19$m=65536,t=3,p=4$QYF5xNVtn6fE/uSZCrY+yA$zNMDx8o68Iw5T4fXKfbae4RrkMgvrRFfVvMuYPmWTwY','Raynaud-sur-Mer','92, rue de Joseph','client','/assets/images/profiles/user_14.png','Corinne','2026-03-02 14:48:44'),
+(15,'0618451462','alfred.marie882@live.com','Marie','$argon2id$v=19$m=65536,t=3,p=4$YvRUsbRK+7gyChI3077WbQ$f2mV31NmQ0FkhWl7eTOj/ofGzKHNS/dPDZKdEEFaFDs','Dupuis','boulevard Chevalier','client',NULL,'Alfred','2026-01-17 00:24:45'),
+(16,'0782814893','claire.muller977@laposte.net','Muller','$argon2id$v=19$m=65536,t=3,p=4$FfaWtOdvqe2doaeW2Vg8LQ$XBVwfb3Mplxm09VpUpUML4AO3LDb3x6ctFc9PRI54FQ','Delmas','924, avenue de Lecomte','client',NULL,'Claire','2026-06-23 16:57:49'),
+(17,'0688095701','olivie.chauveau781@sfr.fr','Chauveau','$argon2id$v=19$m=65536,t=3,p=4$B4Y+LVYRXdM1RIo2i/eNjA$0KaEWNGoFT//J1LYQRikwA1pTaFhbk3TbBqS/QWmy4I','Alexandre','97, rue Paul Jean','client','/assets/images/profiles/user_17.png','Olivie','2026-01-12 23:20:53'),
+(18,'0730391171','alphonse.pruvost900@orange.fr','Pruvost','$argon2id$v=19$m=65536,t=3,p=4$Zp+AYz4kGYsroPZ/zCiqKg$Faf4+Z3G0DCjyZmGLaV0JUymmDHKRfYunjP4ymedGak','Vasseur-sur-Robert','rue de Rolland','client','/assets/images/profiles/user_18.png','Alphonse','2026-01-13 14:29:33'),
+(19,'0627824896','arthur.rémy546@hotmail.fr','Rémy','$argon2id$v=19$m=65536,t=3,p=4$z/21qqSj9NCh/JM8QQ+/aw$Wwfh/bmaox3FjO8Lk4kzXOYngJnloSu5f06Gkqp44g0','Gomez-la-Forêt','93, boulevard Verdier','client','/assets/images/profiles/user_19.png','Arthur','2026-03-30 09:20:51'),
+(20,'0646578713','sabine.reynaud952@noos.fr','Reynaud','$argon2id$v=19$m=65536,t=3,p=4$QFTZragGjcpjJLk1kJR+lA$5dKM7TmGl9nRBIfX6XeJvoKzL4xzJVYXYflPN8mxfoM','Gauthier','avenue de Monnier','client',NULL,'Sabine','2026-03-21 05:01:15'),
+(21,'0698393010','chantal.chauveau347@gmail.com','Chauveau','$argon2id$v=19$m=65536,t=3,p=4$pZbAO1cdQQ4Cz1OlHYhUBg$EirO6QQENf0hOUGUrdqpZEKb5AJLvdgBLsqWo7PfjNQ','Saint Anneboeuf','rue Aubert','client',NULL,'Chantal','2026-04-11 06:51:01'),
+(22,'0651834738','guillaume.briand928@free.fr','Briand','$argon2id$v=19$m=65536,t=3,p=4$nzQwwDrOrOEuUVkPEspkug$IczmMeJH93P2OzefA4v4PFbw+mj1oA7cFtN/bL3hurc','Pinto','8, rue de Girard','client',NULL,'Guillaume','2026-05-02 22:49:34'),
+(23,'0737631165','élodie.garcia958@hotmail.fr','Garcia','$argon2id$v=19$m=65536,t=3,p=4$f5wwol0G08Cs2pjh4Lfclg$XHtH7x6ROUy8T9Fe14MgmUqAh/I4p0l4AkrcQSxdZcw','Brun','47, rue Jacques Gillet','client',NULL,'Élodie','2026-01-01 09:40:24'),
+(24,'0610651333','amélie.aubry479@tele2.fr','Aubry','$argon2id$v=19$m=65536,t=3,p=4$DH6lAEyi3liFWXvBzmkYhA$voSx39EINsU5TppfljPnZ0h45dUzJ8m4VoMgmX/JcPs','Briand','472, rue Bertrand Delorme','client',NULL,'Amélie','2026-05-18 13:59:18'),
+(25,'0724731781','charles.letellier144@dbmail.com','Letellier','$argon2id$v=19$m=65536,t=3,p=4$59JYE+UvyOb+YWasswlo0w$ne/cvQoGrrdNQA398DXC7jbix9i5qel/cCfGMAmKND4','Saint Isabelle','182, rue de Lemoine','client',NULL,'Charles','2026-01-13 19:31:25'),
+(26,'0613267736','daniel.parent554@orange.fr','Parent','$argon2id$v=19$m=65536,t=3,p=4$1s6++GT+jjnN4XAaY2RUHQ$RWyk1B1C8+HeFQ1Nx00KZKBEsqePBnF15KqD9e8xJpM','Mathieu-sur-Mer','209, boulevard Geneviève Barbe','client','/assets/images/profiles/user_26.png','Daniel','2026-03-01 03:52:04'),
+(27,'0706474687','raymond.martins169@dbmail.com','Martins','$argon2id$v=19$m=65536,t=3,p=4$3WLdFaNd5juwqAAXVEo3lQ$iy/IryEY7UJF3BfQdJBA+EgYpG5PMxRI5vToudza0N4','Aubry','84, rue Alain Albert','client',NULL,'Raymond','2026-04-27 03:45:45');
 
 
-INSERT INTO users VALUES 
-(1,'0123456789','nina.richard@lelocal.fr','Richard','$argon2id$v=19$m=65536,t=3,p=4$q6gf2x4DZqzG+fcle0NyOQ$XVkebpNys34lZ2D1sF3TtisOMrJ8X6/vneDss45GSjk','',NULL,NULL,'admin',NULL,'Nina','2026-05-01 00:00:00'),
-(2,'0611223344','admin2@lelocal.fr','Dupont','$argon2id$v=19$m=65536,t=3,p=4$Wvw6//w0PwWbnsFTAP1G9w$Om9jgcbU2XRQf5SFeukUdnDVy0+RusLrHcnI94apilc','',NULL,NULL,'admin',NULL,'Julie','2026-06-22 00:00:00'),
-(3,'0604332181','lucie.marie655@voila.fr','Marie','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Moulin','91, boulevard Briand','client',NULL,'Lucie','2026-01-06 22:38:26'),
-(4,'0613389083','éric.carpentier33@orange.fr','Carpentier','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','MarionVille','78, avenue Pruvost','client','/assets/images/profiles/user_4.png','Éric','2026-02-22 00:31:11'),
-(5,'0737940265','aimé.thierry719@free.fr','Thierry','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Leblanc-la-Forêt','25, avenue Pereira','client',NULL,'Aimé','2026-03-09 03:05:58'),
-(6,'0711615594','adélaïde.texier221@bouygtel.fr','Texier','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Sainte Élise','rue Françoise Cousin','client','/assets/images/profiles/user_6.png','Adélaïde','2026-06-05 02:22:05'),
-(7,'0781618495','laure.étienne748@sfr.fr','Étienne','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Saint Margaud-sur-Mer','4, avenue Lopes','client',NULL,'Laure','2026-03-26 18:54:19'),
-(8,'0603413164','victoire.marchal722@free.fr','Marchal','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Monnier','31, rue de Goncalves','client',NULL,'Victoire','2026-03-28 10:37:25'),
-(9,'0725534192','richard.riou855@orange.fr','Riou','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Lecoq','rue Gomes','client',NULL,'Richard','2026-03-17 00:25:39'),
-(10,'0676483503','christophe.lecomte251@dbmail.com','Lecomte','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Bègue','37, rue Paul Vallet','client','/assets/images/profiles/user_10.png','Christophe','2026-04-15 23:25:12'),
-(11,'0764139537','rémy.letellier825@noos.fr','Letellier','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Alexandre-sur-Étienne','88, rue Masson','client',NULL,'Rémy','2026-01-29 13:57:06'),
-(12,'0724238849','hugues.bazin937@noos.fr','Bazin','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Andre-sur-Collin','578, rue de Bazin','client',NULL,'Hugues','2026-05-15 18:35:58'),
-(13,'0753287101','maggie.regnier598@bouygtel.fr','Regnier','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Marie','82, chemin Charrier','client',NULL,'Maggie','2026-05-23 11:41:10'),
-(14,'0791669784','corinne.gautier164@club-internet.fr','Gautier','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Raynaud-sur-Mer','92, rue de Joseph','client','/assets/images/profiles/user_14.png','Corinne','2026-03-02 14:48:44'),
-(15,'0618451462','alfred.marie882@live.com','Marie','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Dupuis','boulevard Chevalier','client',NULL,'Alfred','2026-01-17 00:24:45'),
-(16,'0782814893','claire.muller977@laposte.net','Muller','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Delmas','924, avenue de Lecomte','client',NULL,'Claire','2026-06-23 16:57:49'),
-(17,'0688095701','olivie.chauveau781@sfr.fr','Chauveau','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Alexandre','97, rue Paul Jean','client','/assets/images/profiles/user_17.png','Olivie','2026-01-12 23:20:53'),
-(18,'0730391171','alphonse.pruvost900@orange.fr','Pruvost','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Vasseur-sur-Robert','rue de Rolland','client','/assets/images/profiles/user_18.png','Alphonse','2026-01-13 14:29:33'),
-(19,'0627824896','arthur.rémy546@hotmail.fr','Rémy','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Gomez-la-Forêt','93, boulevard Verdier','client','/assets/images/profiles/user_19.png','Arthur','2026-03-30 09:20:51'),
-(20,'0646578713','sabine.reynaud952@noos.fr','Reynaud','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Gauthier','avenue de Monnier','client',NULL,'Sabine','2026-03-21 05:01:15'),
-(21,'0698393010','chantal.chauveau347@gmail.com','Chauveau','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Saint Anneboeuf','rue Aubert','client',NULL,'Chantal','2026-04-11 06:51:01'),
-(22,'0651834738','guillaume.briand928@free.fr','Briand','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Pinto','8, rue de Girard','client',NULL,'Guillaume','2026-05-02 22:49:34'),
-(23,'0737631165','élodie.garcia958@hotmail.fr','Garcia','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Brun','47, rue Jacques Gillet','client',NULL,'Élodie','2026-01-01 09:40:24'),
-(24,'0610651333','amélie.aubry479@tele2.fr','Aubry','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Briand','472, rue Bertrand Delorme','client',NULL,'Amélie','2026-05-18 13:59:18'),
-(25,'0724731781','charles.letellier144@dbmail.com','Letellier','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Saint Isabelle','182, rue de Lemoine','client',NULL,'Charles','2026-01-13 19:31:25'),
-(26,'0613267736','daniel.parent554@orange.fr','Parent','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Mathieu-sur-Mer','209, boulevard Geneviève Barbe','client','/assets/images/profiles/user_26.png','Daniel','2026-03-01 03:52:04'),
-(27,'0706474687','raymond.martins169@dbmail.com','Martins','$argon2id$v=19$m=65536,t=3,p=4$tiADxo1MGRBstOM75OWoXw$D90XnYLyz9MYJvrRZ00U8WqOxNBx1wZlEpKfvWFej6M','','Aubry','84, rue Alain Albert','client',NULL,'Raymond','2026-04-27 03:45:45');
-
-DROP TABLE IF EXISTS `activity`;
-
-CREATE TABLE `activity` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `time_slot_id` int NOT NULL,
-  `space_id` int NOT NULL,
-  `start_date` date NOT NULL,
-  `end_date` date NOT NULL,
-  `description` text,
-  `price_unit` int DEFAULT '0',
-  `url_image` varchar(255) NULL,
-  `name` varchar(155) DEFAULT NULL,
-  `users_id` int ,
-  `status` VARCHAR(20) NOT NULL DEFAULT 'approved', 
-  PRIMARY KEY (`id`),
-  KEY `fk_time_slot_has_space_space_idx` (`space_id`),
-  KEY `fk_time_slot_has_space_time_slot_idx` (`time_slot_id`),
-  CONSTRAINT `fk_time_slot_has_space_space` FOREIGN KEY (`space_id`) REFERENCES `space` (`id`),
-  CONSTRAINT `fk_time_slot_has_space_time_slot` FOREIGN KEY (`time_slot_id`) REFERENCES `time_slot` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
+-- activity
 INSERT INTO `activity` VALUES 
 (1,2,13,'2026-05-12','2026-05-12','Pitchez votre projet en 3 minutes devant la communaute Le Local.',0,'/assets/images/events/20261205_pitch_biere.webp','Soiree Pitch et Biere', 2, 'approved'),
 (2,2,13,'2026-04-15','2026-04-15','Concert de jazz dans un cadre intimiste et chaleureux.',8,'/assets/images/events/20260415_concert_jazz.webp','Jazz en soiree', 2, 'approved'),
@@ -235,23 +192,7 @@ INSERT INTO `activity` VALUES
 (110,3,8,'2026-07-04','2026-07-04','Cruel étude arracher léger soumettre perdu intérêt mariage séparer groupe source propos.',5,NULL,'Atelier reparation velo',2,'pending');
 
 
-
-DROP TABLE IF EXISTS `booking`;
-
-CREATE TABLE `booking` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `users_id` int NOT NULL,
-  `bills_number` varchar(45) NOT NULL UNIQUE,
-  `quantity` int NOT NULL,
-  `total_price` decimal(10,2) NOT NULL,
-  `id_activity` int NOT NULL,
-  `payment_status` VARCHAR(20) NOT NULL DEFAULT 'paid',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `bills_number_UNIQUE` (`bills_number`),
-  KEY `fk_booking_users_idx` (`users_id`),
-  CONSTRAINT `fk_booking_users` FOREIGN KEY (`users_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
+-- booking
 INSERT INTO `booking` (`users_id`,`bills_number`,`quantity`,`total_price`,`id_activity`,`payment_status`) VALUES
 (7,'FAC-2026-5494',1,0,38,'paid'),
 (23,'FAC-2026-9042',1,0,37,'pending'),
@@ -859,38 +800,8 @@ INSERT INTO `booking` (`users_id`,`bills_number`,`quantity`,`total_price`,`id_ac
 (14,'FAC-2026-1612',4,400,81,'refunded'),
 (22,'FAC-2026-1796',5,0,107,'paid');
 
--- drop table if exists en haut du doc, doit intervenir avant drop users
-CREATE TABLE `cart` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `quantity` int DEFAULT NULL,
-  `total_price` decimal(10,2) DEFAULT NULL,
-  `price_unit` decimal(10,2) DEFAULT NULL,
-  `users_id` int NOT NULL,
-  `id_activity` int DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_cart_users_idx` (`users_id`),
-  CONSTRAINT `fk_cart_users` FOREIGN KEY (`users_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-
-DROP TABLE IF EXISTS `claim`;
-
-CREATE TABLE `claim` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `title` varchar(100) NOT NULL,
-  `category` varchar(150) NOT NULL,
-  `message` TEXT NOT NULL,
-  `claim_date` varchar(100) NOT NULL,
-  `users_id` int NOT NULL,
-  `activity_id` int NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_claim_users_idx` (`users_id`),
-  KEY `fk_claim_activity_idx` (`activity_id`),
-  CONSTRAINT `fk_claim_activity` FOREIGN KEY (`activity_id`) REFERENCES `activity` (`id`),
-  CONSTRAINT `fk_claim_users` FOREIGN KEY (`users_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-
+-- claim
 INSERT INTO `claim` (`title`,`category`,`message`,`claim_date`,`users_id`,`activity_id`) VALUES 
 ('Enceinte défectueuse', 'Équipement', 'Bonjour, lors de ma session du 5 mai matin, l enceinte de la salle était défectueuse. Le son grésillait constamment, ce qui a rendu le travail difficile.', '2026-05-06', 2, 7),
 ('Remboursement festival', 'Événement', 'Bonjour, étant tombée malade, je n ai pas pu assister au Festival local de juillet. Serait-il possible d obtenir un remboursement ou un avoir ?', '2026-06-01', 2, 5),
@@ -900,6 +811,3 @@ INSERT INTO `claim` (`title`,`category`,`message`,`claim_date`,`users_id`,`activ
 ('Probleme d\'acces badge','Accueil',"J'ai du me reprendre a plusieurs fois et demandé a un ami de m'ouvrir car mon badg était defectueux",'2026-04-15',6,66),
 ('Ecran defectueux','Proprete',"L'écran avait une rangée de LED HS",'2026-05-30',22,16),
 ('Manque de chaises','Événement','Il a manqué 5 chaises','2026-05-02',6,14);
-
-
-
