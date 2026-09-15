@@ -7,10 +7,20 @@ import "./Payment.css";
 import { apiFetch } from "../../hooks/apiFetch";
 import { useSession } from "../../hooks/useSession";
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+/**
+ * Sans clé publique, `loadStripe` lève au chargement du module — donc sur
+ * toutes les pages du site, puisque les routes importent celle-ci. On ne
+ * l'appelle que si la clé existe, et la page de paiement le dit franchement
+ * plutôt que d'afficher un formulaire incapable d'aboutir.
+ */
+const CLE_STRIPE = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+const stripePromise = CLE_STRIPE ? loadStripe(CLE_STRIPE) : null;
 
 const SESSION_PERDUE =
   "Votre session a expiré. Reconnectez-vous pour finaliser votre commande.";
+
+const PAIEMENT_INDISPONIBLE =
+  "Le paiement en ligne n'est pas disponible pour le moment. Votre panier est conservé.";
 
 function Payment() {
   const { user, loading } = useSession();
@@ -39,7 +49,11 @@ function Payment() {
       .catch(() => setError("Impossible de contacter le serveur."));
   }, []);
 
-  const erreurAffichee = !loading && !user ? SESSION_PERDUE : error;
+  const erreurAffichee = !stripePromise
+    ? PAIEMENT_INDISPONIBLE
+    : !loading && !user
+      ? SESSION_PERDUE
+      : error;
 
   if (erreurAffichee) {
     return (

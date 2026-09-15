@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import type { Space } from "../types/space";
-import { apiFetch } from "./apiFetch";
+import { apiList } from "./apiFetch";
 
 function useWorkshop() {
   const [workshop, setWorkshop] = useState<Space[]>([]);
   useEffect(() => {
-    apiFetch("/api/spaces?category=Atelier")
-
-      .then((res) => res.json())
-      .then((data) => setWorkshop(data));
+    apiList<Space>("/api/spaces?category=Atelier").then(setWorkshop);
   }, []);
 
   return workshop;

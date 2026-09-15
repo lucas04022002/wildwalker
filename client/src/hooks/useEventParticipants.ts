@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiFetch } from "./apiFetch";
+import { apiList } from "./apiFetch";
 
 type EventParticipant = {
   id_activity: number;
@@ -12,9 +12,7 @@ function useEventParticipants() {
   const [participants, setParticipants] = useState<EventParticipant[]>([]);
 
   useEffect(() => {
-    apiFetch("/api/events/participants")
-      .then((response) => response.json())
-      .then((data: EventParticipant[]) => setParticipants(data));
+    apiList<EventParticipant>("/api/events/participants").then(setParticipants);
   }, []);
 
   return participants;

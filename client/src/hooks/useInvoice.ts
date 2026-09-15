@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import type { BookingHistory } from "../types/booking";
-import { apiFetch } from "./apiFetch";
+import { apiOne } from "./apiFetch";
 
 function useInvoice(bookingId: number) {
   const [invoice, setInvoice] = useState<BookingHistory | null>(null);
 
   useEffect(() => {
-    apiFetch(`/api/invoice/${bookingId}`)
-      .then((res) => res.json())
-      .then((data: BookingHistory) => setInvoice(data));
+    apiOne<BookingHistory>(`/api/invoice/${bookingId}`).then(setInvoice);
   }, [bookingId]);
 
   return invoice;

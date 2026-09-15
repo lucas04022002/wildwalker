@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Activity } from "../types/activity";
-import { apiFetch } from "./apiFetch";
+import { apiList } from "./apiFetch";
 
 function useUpcomingEvents(refreshKey = 0) {
   const [upcomingEvents, setUpcomingEvents] = useState<Activity[]>([]);
@@ -8,9 +8,7 @@ function useUpcomingEvents(refreshKey = 0) {
   useEffect(() => {
     void refreshKey;
 
-    apiFetch("/api/events/")
-      .then((res) => res.json())
-      .then((data) => setUpcomingEvents(data));
+    apiList<Activity>("/api/events/").then(setUpcomingEvents);
   }, [refreshKey]);
 
   return upcomingEvents;

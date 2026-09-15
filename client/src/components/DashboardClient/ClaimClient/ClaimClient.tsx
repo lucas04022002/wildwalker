@@ -22,14 +22,22 @@ function ClaimClient() {
   const billing = useBillingClient(user?.id ?? 0);
   const { createClaim } = useCreateClaim();
   const [success, setSuccess] = useState(false);
+  const [echec, setEchec] = useState(false);
 
   function handleSubmit() {
+    setEchec(false);
     createClaim(user?.id ?? 0, {
       title,
       category,
       message,
       activity_id: activityId,
-    }).then(() => {
+    }).then((envoyee) => {
+      // On ne vide le formulaire que si la réclamation est réellement partie :
+      // sinon l'utilisateur perdrait son texte en même temps que sa réclamation.
+      if (!envoyee) {
+        setEchec(true);
+        return;
+      }
       setTitle("");
       setMessage("");
       setActivityId("");
@@ -117,6 +125,12 @@ function ClaimClient() {
       {success && (
         <p className="claim-client__success" role="alert">
           ✓ Votre réclamation a bien été envoyée !
+        </p>
+      )}
+      {echec && (
+        <p className="claim-client__error" role="alert">
+          Votre réclamation n’a pas pu être envoyée. Votre texte est conservé —
+          vérifiez que vous êtes toujours connecté, puis réessayez.
         </p>
       )}
       <button

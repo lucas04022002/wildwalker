@@ -150,6 +150,17 @@
     border-radius: var(--radius-lg);
   }
 
+  & .claim-client__error {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    line-height: 1.5;
+    color: #8a2020;
+    background-color: #f8e6e6;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+
   & .claim-client__submit {
     align-self: flex-start;
     font-family: var(--font-ui);
