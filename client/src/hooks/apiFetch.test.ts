@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, logout } from "./apiFetch";
+import { apiFetch, apiList, apiOne, logout } from "./apiFetch";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -161,5 +161,77 @@ describe("apiFetch sans VITE_API_URL (production, même origine)", () => {
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).not.toContain("undefined");
     expect(url).toBe("/api/cart");
+  });
+});
+
+/**
+ * Ces tests décrivent la panne réelle du 15/09/2026 : une session expirée
+ * renvoyait `401 {"message": "..."}`, l'objet atterrissait dans un état
+ * déclaré comme tableau, et le premier `.slice()` faisait tomber toute la
+ * page. Le garde-fou doit donc tenir sur le statut ET sur la forme.
+ */
+describe("apiList", () => {
+  const reponse = (corps: unknown, status = 200) =>
+    new Response(JSON.stringify(corps), { status });
+
+  const simuler = (r: Response) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => r),
+    );
+
+  it("rend la liste quand le serveur répond une liste", async () => {
+    simuler(reponse([{ id: 1 }, { id: 2 }]));
+    expect(await apiList("/api/spaces")).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it("rend une liste vide sur 401, sans propager l'objet d'erreur", async () => {
+    simuler(reponse({ message: "Veuillez vous connecter." }, 401));
+    expect(await apiList("/api/spaces")).toEqual([]);
+  });
+
+  it("rend une liste vide si un 200 rapporte autre chose qu'une liste", async () => {
+    simuler(reponse({ message: "surprise" }));
+    expect(await apiList("/api/spaces")).toEqual([]);
+  });
+
+  it("rend une liste vide si le serveur est injoignable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("réseau");
+      }),
+    );
+    expect(await apiList("/api/spaces")).toEqual([]);
+  });
+
+  it("rend une liste vide si le corps n'est pas du JSON", async () => {
+    simuler(new Response("<html>502</html>", { status: 200 }));
+    expect(await apiList("/api/spaces")).toEqual([]);
+  });
+});
+
+describe("apiOne", () => {
+  it("rend l'objet quand le serveur répond 200", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(JSON.stringify({ id: 7 }), { status: 200 }),
+      ),
+    );
+    expect(await apiOne("/api/invoice/7")).toEqual({ id: 7 });
+  });
+
+  it("rend null sur une erreur, pour ne pas confondre un échec avec un objet", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "Introuvable." }), {
+            status: 404,
+          }),
+      ),
+    );
+    expect(await apiOne("/api/invoice/7")).toBeNull();
   });
 });

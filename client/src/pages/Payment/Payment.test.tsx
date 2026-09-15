@@ -68,12 +68,28 @@ const renderPayment = () =>
 
 describe("Payment", () => {
   beforeEach(() => {
+    // La clé est stubée explicitement : sans cela le test passait ou échouait
+    // selon qu'un .env traînait sur la machine, et l'intégration continue
+    // n'en a pas.
+    vi.stubEnv("VITE_STRIPE_PUBLIC_KEY", "pk_test_pour_les_tests");
     vi.stubGlobal("fetch", vi.fn());
     useSessionMock.mockReturnValue(session(client));
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("annonce l'indisponibilité quand la clé publique Stripe manque", async () => {
+    vi.stubEnv("VITE_STRIPE_PUBLIC_KEY", "");
+    renderPayment();
+
+    expect(
+      await screen.findByText(/paiement en ligne n.est pas disponible/i),
+    ).toBeInTheDocument();
+    // Aucune intention de paiement n'est demandée : il n'y a rien à finaliser.
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("demande l'intention de paiement sans envoyer de montant", async () => {

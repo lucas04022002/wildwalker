@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import type { Space } from "../types/space";
-import { apiFetch } from "./apiFetch";
+import { apiList } from "./apiFetch";
 
 function useSpaces() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   useEffect(() => {
-    apiFetch("/api/spaces")
-      .then((res) => res.json())
-      .then((data) => setSpaces(data));
+    apiList<Space>("/api/spaces").then(setSpaces);
   }, []);
   return spaces;
 }

@@ -10,7 +10,15 @@ const client = mysql.createPool({
   user: DB_USER,
   password: DB_PASSWORD,
   database: DB_NAME,
-  timezone: "Europe/Paris", //force le bon fuseau horaire pour les dates et les heures
+  /**
+   * mysql2 n'accepte pas un nom de fuseau : il refusait « Europe/Paris » et
+   * retombait silencieusement sur le fuseau du conteneur, donc sur une valeur
+   * qui dépend de l'hébergeur. Les DATETIME stockés sont des heures murales du
+   * lieu (« l'atelier commence à 14 h ») et ne doivent subir aucun décalage :
+   * « Z » les rend tels qu'ils sont écrits. Un décalage fixe comme « +02:00 »
+   * serait faux six mois par an, au changement d'heure.
+   */
+  timezone: "Z",
 });
 
 // Ready to export
