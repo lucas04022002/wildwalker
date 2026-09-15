@@ -1,20 +1,11 @@
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import CheckoutForm from "../../components/CheckoutForm/CheckoutForm";
 import "./Payment.css";
 import { apiFetch } from "../../hooks/apiFetch";
 import { useSession } from "../../hooks/useSession";
-
-/**
- * Sans clé publique, `loadStripe` lève au chargement du module — donc sur
- * toutes les pages du site, puisque les routes importent celle-ci. On ne
- * l'appelle que si la clé existe, et la page de paiement le dit franchement
- * plutôt que d'afficher un formulaire incapable d'aboutir.
- */
-const CLE_STRIPE = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-const stripePromise = CLE_STRIPE ? loadStripe(CLE_STRIPE) : null;
 
 const SESSION_PERDUE =
   "Votre session a expiré. Reconnectez-vous pour finaliser votre commande.";
@@ -23,6 +14,20 @@ const PAIEMENT_INDISPONIBLE =
   "Le paiement en ligne n'est pas disponible pour le moment. Votre panier est conservé.";
 
 function Payment() {
+  /**
+   * Stripe est chargé ici, et pas au niveau du module.
+   *
+   * Au niveau du module, l'appel partait dès qu'un fichier de routes importait
+   * cette page — donc sur toutes les pages du site — et levait purement et
+   * simplement quand la clé manquait. Dans le composant, le script n'est
+   * demandé que par la page de paiement, et l'absence de clé devient un état
+   * affichable plutôt qu'une exception.
+   */
+  const stripePromise = useMemo(() => {
+    const cle = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+    return cle ? loadStripe(cle) : null;
+  }, []);
+
   const { user, loading } = useSession();
   const navigate = useNavigate();
   const [clientSecret, setClientSecret] = useState("");
@@ -31,6 +36,10 @@ function Payment() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Sans Stripe, une intention de paiement ne sera jamais confirmée :
+    // la demander ne ferait qu'en abandonner une de plus côté Stripe.
+    if (!stripePromise) return;
+
     // Corps vide : le montant est relu en base à partir du panier de
     // l'utilisateur connecté. Un prix envoyé par le client serait un prix
     // choisi par le client.
@@ -47,7 +56,7 @@ function Payment() {
         setAmountInCents(data.amount ?? 0);
       })
       .catch(() => setError("Impossible de contacter le serveur."));
-  }, []);
+  }, [stripePromise]);
 
   const erreurAffichee = !stripePromise
     ? PAIEMENT_INDISPONIBLE
