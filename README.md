@@ -1,4 +1,19 @@
-# WildWalker — « Le Local »
+# Le Local — réservation d'un tiers-lieu
+
+[**Voir le produit en ligne →**](https://lelocal.lucasguilhot.fr) · [Étude de cas complète](https://lucasguilhot.fr/projets/le-local) · [Portfolio](https://lucasguilhot.fr)
+
+`React` `TypeScript` `Express` `MySQL` `Stripe` `Docker`
+
+> **Projet d'équipe repris seul.** Le code venait d'un projet collectif de formation :
+> il fallait le sécuriser, le tester et le rendre déployable sans tout réécrire.
+> **213 tests** ajoutés là où il n'y en avait aucun, image Docker ramenée de
+> **113 Mo à 8,7 Mo**, routes sécurisées, migrations versionnées, réservations
+> concurrentes traitées.
+>
+> Comptes de démonstration : `nina.richard@lelocal.fr` / `demo-admin-2026` (administration),
+> `lucie.marie655@voila.fr` / `demo-client-2026` (client).
+
+---
 
 Plateforme de réservation d'un tiers-lieu parisien : espaces de coworking,
 studios son et photo, salles de réunion, ateliers de fabrication, locaux vides
