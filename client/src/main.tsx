@@ -11,6 +11,7 @@ import DashboardClientPage from "./pages/DashboardClientPage/DashboardClientPage
 import Events from "./pages/Events/Events";
 import Home from "./pages/Home/Home";
 import InvoicePage from "./pages/InvoicePage/InvoicePage";
+import Legal from "./pages/Legal/Legal";
 import LogIn from "./pages/Login/Login";
 import ForgotPassword from "./pages/PasswordReset/ForgotPassword";
 import ResetPassword from "./pages/PasswordReset/ResetPassword";
@@ -102,6 +103,12 @@ export const routes: RouteObject[] = [
       },
       // Publiques par nécessité : quelqu'un qui a perdu son mot de passe ne
       // peut pas s'authentifier pour le changer.
+      // Les mentions légales doivent rester lisibles sans compte, y compris
+      // depuis le tableau de bord : elles sont publiques.
+      {
+        path: "/mentions-legales",
+        element: <Legal />,
+      },
       {
         path: "/mot-de-passe-oublie",
         element: <ForgotPassword />,

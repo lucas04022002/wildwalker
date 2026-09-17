@@ -59,8 +59,12 @@ function FooterHome() {
         <div className="footer-home-divider footer-home-divider-bottom" />
 
         <section className="footer-home-bottom">
+          {/* « Association loi 1901 » affirmait une personne morale qui n'existe
+              pas, sur un site public. Le Local est une démonstration : le pied
+              de page le dit, et « Mentions légales » mène enfin quelque part. */}
           <p className="footer-home-legal">
-            © 2019 Le Local — Association loi 1901 · Mentions légales
+            Le Local — projet de démonstration ·{" "}
+            <Link to="/mentions-legales">Mentions légales</Link>
           </p>
         </section>
       </div>

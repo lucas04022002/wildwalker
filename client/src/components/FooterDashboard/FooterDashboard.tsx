@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import "./FooterDashboard.css";
 
 function FooterDashboard() {
@@ -40,8 +41,12 @@ function FooterDashboard() {
         <div className="footer-dashboard-divider" />
 
         <section className="footer-dashboard-bottom">
+          {/* « Association loi 1901 » affirmait une personne morale qui n'existe
+              pas, sur un site public. Le Local est une démonstration : le pied
+              de page le dit, et « Mentions légales » mène enfin quelque part. */}
           <p className="footer-dashboard-legal">
-            © 2019 Le Local — Association loi 1901 · Mentions légales
+            Le Local — projet de démonstration ·{" "}
+            <Link to="/mentions-legales">Mentions légales</Link>
           </p>
         </section>
       </div>

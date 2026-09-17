@@ -1,0 +1,122 @@
+/*
+ * Mentions légales : une page de lecture, pas une page de produit.
+ *
+ * Largeur de ligne bornée à 68 caractères — au-delà, l'œil perd la ligne
+ * suivante. Le reste reprend les jetons du site, sans couleur littérale.
+ */
+
+.legal-page {
+  background-color: var(--color-bg-1);
+  padding: clamp(32px, 7vw, 80px) clamp(16px, 5vw, 64px) 80px;
+}
+
+.legal-inner {
+  max-width: 68ch;
+  margin: 0 auto;
+}
+
+.legal-eyebrow {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--color-bg-hero);
+}
+
+.legal-title {
+  margin: 12px 0 28px;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+  color: var(--color-text-primary);
+}
+
+/* L'avertissement se lit avant tout le reste : bordure marquée, fond distinct. */
+.legal-avertissement {
+  margin: 0 0 40px;
+  padding: 16px 20px;
+  border-left: 4px solid var(--color-bg-hero);
+  background-color: var(--color-bg-card);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text-primary);
+}
+
+.legal-inner h2 {
+  margin: 40px 0 16px;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--color-text-primary);
+}
+
+.legal-inner p {
+  margin: 0 0 14px;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text-secondary);
+}
+
+/*
+ * Étiquette et valeur : côte à côte dès qu'il y a la place, empilées sinon.
+ * Une grille à deux colonnes figées couperait les adresses sur un téléphone.
+ */
+.legal-liste {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px 24px;
+  margin: 0;
+}
+
+.legal-liste dt {
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.legal-liste dd {
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+}
+
+@media (min-width: 620px) {
+  .legal-liste {
+    grid-template-columns: minmax(0, 22ch) minmax(0, 1fr);
+    align-items: baseline;
+  }
+
+  .legal-liste dd {
+    margin-bottom: 4px;
+  }
+}
+
+.legal-point {
+  margin-bottom: 28px;
+}
+
+.legal-point h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.legal-note {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+}
+
+.legal-retour {
+  margin-top: 32px;
+}
+
+.legal-inner a {
+  color: var(--color-bg-hero);
+}
