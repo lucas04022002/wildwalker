@@ -35,7 +35,14 @@ export default function SignIn() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message ?? "Une erreur est survenue.");
+        // La validation du serveur répond `{ errors: [...] }`, pas `{ message }` :
+        // sans cette branche, un mot de passe trop court ou un e-mail mal formé
+        // s'affichait « Une erreur est survenue », sans dire quoi corriger.
+        const details = Array.isArray(data.errors) ? data.errors : null;
+
+        setError(
+          details?.join(" ") ?? data.message ?? "Une erreur est survenue.",
+        );
         return;
       }
 

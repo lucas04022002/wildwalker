@@ -40,7 +40,24 @@ const DUMMY_PASSWORD_HASH =
  * public qui répond « ce compte existe déjà » est un outil d'énumération.
  * Le conflit est seulement noté côté serveur.
  */
-const REGISTER_ACCEPTED = "Si l'adresse est disponible, le compte est créé.";
+const REGISTER_ACCEPTED =
+  "Si l'adresse e-mail et le numéro de téléphone sont disponibles, le compte est créé.";
+
+/**
+ * Doublon détecté par la base plutôt que par la vérification préalable.
+ *
+ * Le contrôle `findByEmail` / `findByPhone` couvre le cas courant, mais deux
+ * inscriptions simultanées sur le même e-mail passent toutes les deux le
+ * contrôle avant que l'une n'insère. Sans ce filet, la seconde ressort en 500
+ * — et ce 500 rouvre exactement le canal d'énumération que la réponse neutre
+ * ferme. On répond donc comme si de rien n'était.
+ */
+const isDuplicateEntry = (err: unknown): boolean => {
+  if (typeof err !== "object" || err === null) return false;
+
+  const { code, errno } = err as { code?: unknown; errno?: unknown };
+  return code === "ER_DUP_ENTRY" || errno === 1062;
+};
 
 // Inscription : crée toujours un compte avec le role "client"
 const register: RequestHandler = async (req, res, next) => {
@@ -57,23 +74,41 @@ const register: RequestHandler = async (req, res, next) => {
     // réponse, que l'adresse existe ou non.
     const passwordHash = await argon2.hash(password);
 
-    const existing = await authRepository.findByEmail(email);
+    // Les deux colonnes UNIQUE de la table sont interrogées, et en parallèle :
+    // séquentiellement, un e-mail libre coûterait une requête de moins qu'un
+    // e-mail pris, et cet écart se mesure.
+    const [byEmail, byPhone] = await Promise.all([
+      authRepository.findByEmail(email),
+      authRepository.findByPhone(phone_number),
+    ]);
 
-    if (existing) {
-      console.info("Inscription refusée : adresse déjà utilisée.");
+    if (byEmail || byPhone) {
+      // Le journal ne dit pas lequel des deux : il n'a pas à porter une
+      // information que la réponse refuse de donner.
+      console.info("Inscription refusée : identifiant déjà utilisé.");
       res.status(201).json({ message: REGISTER_ACCEPTED });
       return;
     }
 
-    const user = await authRepository.create({
-      firstname,
-      lastname,
-      email,
-      passwordHash,
-      phone_number,
-      city,
-      adress,
-    });
+    let user: Awaited<ReturnType<typeof authRepository.create>>;
+
+    try {
+      user = await authRepository.create({
+        firstname,
+        lastname,
+        email,
+        passwordHash,
+        phone_number,
+        city,
+        adress,
+      });
+    } catch (err) {
+      if (!isDuplicateEntry(err)) throw err;
+
+      console.info("Inscription refusée : doublon détecté à l'insertion.");
+      res.status(201).json({ message: REGISTER_ACCEPTED });
+      return;
+    }
 
     if (!user) {
       res
@@ -184,4 +219,4 @@ const me: RequestHandler = async (req, res, next) => {
 };
 
 export default { register, loginClient, loginAdmin, logout, me };
-export { DUMMY_PASSWORD_HASH, REGISTER_ACCEPTED };
+export { DUMMY_PASSWORD_HASH, REGISTER_ACCEPTED, isDuplicateEntry };

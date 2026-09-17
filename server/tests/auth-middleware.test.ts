@@ -19,6 +19,7 @@ jest.mock("../src/modules/Authentification/AuthentificationRepository", () => ({
   __esModule: true,
   default: {
     findByEmail: jest.fn(),
+    findByPhone: jest.fn(),
     findById: jest.fn(),
     create: jest.fn(),
   },
@@ -35,7 +36,10 @@ jest.mock("argon2", () => ({
 import argon2 from "argon2";
 import { resetLoginLimiter } from "../src/Middlewares/rateLimit";
 import app from "../src/app";
-import { DUMMY_PASSWORD_HASH } from "../src/modules/Authentification/AuthentificationAction";
+import {
+  DUMMY_PASSWORD_HASH,
+  REGISTER_ACCEPTED,
+} from "../src/modules/Authentification/AuthentificationAction";
 import authRepository from "../src/modules/Authentification/AuthentificationRepository";
 import {
   adminUser,
@@ -229,6 +233,9 @@ describe("inscription", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetLoginLimiter();
+    // `phone_number` porte lui aussi une contrainte UNIQUE : l'inscription
+    // l'interroge maintenant au même titre que l'adresse.
+    (authRepository.findByPhone as jest.Mock).mockResolvedValue(null);
   });
 
   test("répond un message générique quand l'adresse est libre", async () => {
@@ -244,7 +251,7 @@ describe("inscription", () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({
-      message: "Si l'adresse est disponible, le compte est créé.",
+      message: REGISTER_ACCEPTED,
     });
     expect(res.body.user).toBeUndefined();
     expect(res.headers["set-cookie"]).toBeUndefined();
@@ -261,7 +268,7 @@ describe("inscription", () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({
-      message: "Si l'adresse est disponible, le compte est créé.",
+      message: REGISTER_ACCEPTED,
     });
     expect(authRepository.create).not.toHaveBeenCalled();
   });

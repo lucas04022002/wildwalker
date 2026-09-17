@@ -28,6 +28,19 @@ const findByEmail = async (email: string): Promise<UserRow | null> => {
   return (rows[0] as UserRow) ?? null;
 };
 
+/**
+ * La colonne `phone_number` porte une contrainte UNIQUE en base, au même titre
+ * que `email`. L'inscription ne vérifiait que l'e-mail : un numéro déjà pris
+ * partait donc jusqu'à l'INSERT et remontait en erreur 500.
+ */
+const findByPhone = async (phoneNumber: string): Promise<UserRow | null> => {
+  const [rows] = await databaseLeLocal.query<Rows>(
+    "SELECT * FROM users WHERE phone_number = ? LIMIT 1",
+    [phoneNumber],
+  );
+  return (rows[0] as UserRow) ?? null;
+};
+
 const findById = async (id: number): Promise<SafeUser | null> => {
   const [rows] = await databaseLeLocal.query<Rows>(
     `SELECT ${SAFE_USER_FIELDS} FROM users WHERE id = ? LIMIT 1`,
@@ -62,5 +75,5 @@ const create = async (user: {
   return findById(result.insertId);
 };
 
-export default { findByEmail, findById, create };
+export default { findByEmail, findByPhone, findById, create };
 export type { UserRow, SafeUser };
