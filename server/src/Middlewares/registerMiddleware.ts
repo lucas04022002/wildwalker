@@ -28,21 +28,47 @@ const NOM_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ\s'-]+$/;
 /** Chiffres et ponctuation de numéro, sans imposer un format national. */
 const TELEPHONE_PATTERN = /^[0-9+\s().-]{6,20}$/;
 
+/*
+ * Chaque champ porte un libellé français : sans lui, Joi affiche le nom
+ * technique de la colonne, et l'utilisateur lisait « Le champ "password" doit
+ * contenir au moins 10 caractères ».
+ */
 const registerSchema = Joi.object({
   firstname: Joi.string()
     .trim()
     .pattern(NOM_PATTERN)
     .min(2)
     .max(150)
-    .required(),
-  lastname: Joi.string().trim().pattern(NOM_PATTERN).min(2).max(150).required(),
+    .required()
+    .label("prénom"),
+  lastname: Joi.string()
+    .trim()
+    .pattern(NOM_PATTERN)
+    .min(2)
+    .max(150)
+    .required()
+    .label("nom"),
   // `lowercase` normalise à l'entrée : la collation de la table est déjà
   // insensible à la casse, le stockage l'est désormais aussi.
-  email: Joi.string().trim().lowercase().email().max(150).required(),
-  password: Joi.string().min(PASSWORD_MIN).max(PASSWORD_MAX).required(),
-  phone_number: Joi.string().trim().pattern(TELEPHONE_PATTERN).required(),
-  city: Joi.string().trim().max(150).allow("", null),
-  adress: Joi.string().trim().max(255).allow("", null),
+  email: Joi.string()
+    .trim()
+    .lowercase()
+    .email()
+    .max(150)
+    .required()
+    .label("adresse e-mail"),
+  password: Joi.string()
+    .min(PASSWORD_MIN)
+    .max(PASSWORD_MAX)
+    .required()
+    .label("mot de passe"),
+  phone_number: Joi.string()
+    .trim()
+    .pattern(TELEPHONE_PATTERN)
+    .required()
+    .label("numéro de téléphone"),
+  city: Joi.string().trim().max(150).allow("", null).label("ville"),
+  adress: Joi.string().trim().max(255).allow("", null).label("adresse"),
 });
 
 const validateRegister: RequestHandler = (req, res, next) => {
@@ -53,13 +79,11 @@ const validateRegister: RequestHandler = (req, res, next) => {
     // doit pas reposer sur une seule ligne.
     stripUnknown: true,
     messages: {
-      "any.required": "Le champ {#label} est obligatoire.",
-      "string.base": "Le champ {#label} doit être du texte.",
-      "string.empty": "Le champ {#label} ne peut pas être vide.",
-      "string.min":
-        "Le champ {#label} doit contenir au moins {#limit} caractères.",
-      "string.max":
-        "Le champ {#label} ne peut pas dépasser {#limit} caractères.",
+      "any.required": "Le {#label} est obligatoire.",
+      "string.base": "Le {#label} doit être du texte.",
+      "string.empty": "Le {#label} ne peut pas être vide.",
+      "string.min": "Le {#label} doit contenir au moins {#limit} caractères.",
+      "string.max": "Le {#label} ne peut pas dépasser {#limit} caractères.",
       "string.email": "L'adresse e-mail n'est pas valide.",
       "string.pattern.base":
         "Le champ {#label} contient des caractères refusés.",
