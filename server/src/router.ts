@@ -3,7 +3,11 @@ import express from "express";
 import authMiddleware from "./Middlewares/authMiddleware";
 import cartMiddleware from "./Middlewares/cartMiddleware";
 import eventMiddleware from "./Middlewares/eventMiddleware";
-import { loginLimiter, registerLimiter } from "./Middlewares/rateLimit";
+import {
+  loginIpLimiter,
+  loginLimiter,
+  registerLimiter,
+} from "./Middlewares/rateLimit";
 import { validateRegister } from "./Middlewares/registerMiddleware";
 import authActions from "./modules/Authentification/AuthentificationAction";
 import paymentActions from "./modules/Payment/PaymentAction";
@@ -38,8 +42,18 @@ router.post(
   validateRegister,
   authActions.register,
 );
-router.post("/api/auth/login/client", loginLimiter, authActions.loginClient);
-router.post("/api/auth/login/admin", loginLimiter, authActions.loginAdmin);
+router.post(
+  "/api/auth/login/client",
+  loginIpLimiter,
+  loginLimiter,
+  authActions.loginClient,
+);
+router.post(
+  "/api/auth/login/admin",
+  loginIpLimiter,
+  loginLimiter,
+  authActions.loginAdmin,
+);
 router.post("/api/auth/logout", authActions.logout);
 router.get("/api/auth/me", authMiddleware.requireAuth, authActions.me);
 

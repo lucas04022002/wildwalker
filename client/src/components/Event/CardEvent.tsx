@@ -82,7 +82,12 @@ function CardEvent({ event, participants }: CardEventProps) {
       <article className="card-event-container">
         <div className="card-img-container">
           <img
-            src={`${import.meta.env.VITE_API_URL ?? ""}/${event.url_image}`}
+            /* Pas de slash ajouté : `url_image` en porte déjà un. En production
+               `VITE_API_URL` est vide (même origine), et le slash surnuméraire
+               donnait `//assets/images/...` — une URL relative au protocole, que
+               le navigateur lit comme l'hôte « assets ». Les images d'événements
+               étaient cassées en ligne. */
+            src={`${import.meta.env.VITE_API_URL ?? ""}${event.url_image}`}
             alt=""
             className="card-img"
           />

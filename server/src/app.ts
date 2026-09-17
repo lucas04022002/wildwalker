@@ -8,19 +8,77 @@ import helmet from "helmet";
 import multer from "multer";
 
 import { assertSameOrigin } from "./Middlewares/originMiddleware";
+import { trustedProxyHops } from "./Middlewares/rateLimit";
 import router from "./router";
 import { MAX_UPLOAD_BYTES, UnsupportedFileTypeError } from "./upload/upload";
 
 const app = express();
 
 /* ************************************************************************* */
+// Proxys de confiance
+/* ************************************************************************* */
+
+/**
+ * Sans ce réglage, `req.ip` est l'adresse du dernier saut réseau : derrière le
+ * reverse proxy de Coolify, celle du proxy, identique pour tous les visiteurs.
+ * Tout ce qui raisonne par adresse — le compteur d'essais de connexion — ne
+ * distinguait donc personne.
+ *
+ * Le nombre est déclaré, jamais deviné : `trust proxy: true` ferait confiance à
+ * n'importe quel `X-Forwarded-For`, qu'un client peut écrire lui-même. Avec un
+ * nombre de sauts, Express ne remonte que d'autant, et l'adresse retenue est
+ * celle que le proxy a réellement vue.
+ *
+ * 0 par défaut (exécution directe), 1 derrière Coolify.
+ */
+const proxyHops = trustedProxyHops();
+
+if (proxyHops > 0) {
+  app.set("trust proxy", proxyHops);
+}
+
+/* ************************************************************************* */
 // En-têtes de sécurité
 /* ************************************************************************* */
 
-// `contentSecurityPolicy: false` pour l'instant : une CSP réelle demande de
-// lister les origines du client (Stripe, polices) et sera posée avec le
-// déploiement. Le reste de helmet (nosniff, frameguard, HSTS...) s'applique.
-app.use(helmet({ contentSecurityPolicy: false }));
+/**
+ * Politique de sécurité du contenu.
+ *
+ * Elle était désactivée en attendant le déploiement ; il a eu lieu. Les
+ * origines ci-dessous ne sont pas devinées : elles ont été relevées sur le site
+ * en production, en listant ce que la page charge réellement.
+ *
+ * `'unsafe-inline'` sur les styles est nécessaire et assumé : le client pose
+ * des styles en ligne (images de fond des ateliers, via l'attribut `style`) et
+ * Google Fonts sert une feuille externe. Il n'est PAS accordé aux scripts,
+ * qui sont le vrai vecteur : un script injecté ne s'exécutera pas.
+ */
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        // Stripe charge son SDK depuis js.stripe.com et l'exige.
+        scriptSrc: ["'self'", "https://js.stripe.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        // `blob:` pour les aperçus d'image avant envoi ; Unsplash pour les
+        // visuels de démonstration des espaces.
+        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com"],
+        connectSrc: ["'self'", "https://api.stripe.com"],
+        // Stripe monte ses champs de carte dans des iframes : sans cette
+        // ligne, le paiement ne s'affiche pas du tout.
+        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+  }),
+);
 
 /* ************************************************************************* */
 // CORS

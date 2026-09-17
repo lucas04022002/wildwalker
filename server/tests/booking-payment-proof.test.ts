@@ -16,6 +16,21 @@ const create = jest.fn(async () => ({
   id: "pi_test_123",
 }));
 
+/**
+ * Ces suites mettent en file les réponses SQL, une par requête attendue. Depuis
+ * que `requireAuth` interroge les sessions révoquées, il y a une requête de
+ * plus par appel authentifié, et la file se décalait d'un cran. On simule donc
+ * le dépôt de sessions : ces tests parlent de paiement, pas de révocation.
+ */
+jest.mock("../src/modules/Authentification/SessionRepository", () => ({
+  __esModule: true,
+  default: {
+    isRevoked: jest.fn(async () => false),
+    revoke: jest.fn(async () => undefined),
+    purgerExpirees: jest.fn(async () => undefined),
+  },
+}));
+
 jest.mock("stripe", () => ({
   __esModule: true,
   default: jest.fn(() => ({

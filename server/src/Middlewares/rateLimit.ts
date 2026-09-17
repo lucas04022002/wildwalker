@@ -30,8 +30,11 @@ type EmailRateLimiter = RequestHandler & {
   reset: () => void;
 };
 
+/** Comment un compteur désigne celui qu'il suit. */
+type KeyFn = (req: Parameters<RequestHandler>[0]) => string;
+
 /** Clé du compteur : l'e-mail normalisé, ou l'IP si le body n'en porte pas. */
-const keyFor = (req: Parameters<RequestHandler>[0]): string => {
+const keyByEmail: KeyFn = (req) => {
   const email = (req.body as { email?: unknown } | undefined)?.email;
 
   if (typeof email === "string" && email.trim() !== "") {
@@ -41,8 +44,42 @@ const keyFor = (req: Parameters<RequestHandler>[0]): string => {
   return `ip:${req.ip ?? "inconnue"}`;
 };
 
-const createEmailRateLimiter = (
+/** Clé du compteur par adresse, quel que soit le corps de la requête. */
+const keyByIp: KeyFn = (req) => `ip:${req.ip ?? "inconnue"}`;
+
+/**
+ * Nombre de proxys de confiance devant l'application.
+ *
+ * Tant qu'il vaut 0, `req.ip` est l'adresse du dernier saut réseau : derrière
+ * le reverse proxy de Coolify, la même pour tous les visiteurs. Un compteur
+ * par IP porterait alors sur le proxy, et trente essais suffiraient à fermer
+ * la connexion du site entier.
+ *
+ * Le compteur par IP reste donc inerte tant que ce nombre n'est pas posé :
+ * mieux vaut une protection absente qu'une protection qui verrouille tout le
+ * monde. En production derrière Coolify : `TRUSTED_PROXY_HOPS=1`.
+ */
+const trustedProxyHops = (): number => {
+  const brut = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? "0", 10);
+  return Number.isFinite(brut) && brut > 0 ? brut : 0;
+};
+
+/**
+ * Plafond par adresse IP, plus large que celui par compte.
+ *
+ * Le compteur par e-mail protège UN compte contre le bourrage ; il ne voit pas
+ * la pulvérisation — un mot de passe courant essayé sur mille adresses n'est
+ * jamais freiné, chaque adresse ayant son propre compteur.
+ *
+ * Trente, et non dix : une IP est souvent partagée (bureau, NAT d'opérateur
+ * mobile), et plusieurs personnes peuvent légitimement s'y tromper.
+ */
+const MAX_ATTEMPTS_PAR_IP = 30;
+
+const createRateLimiter = (
+  keyFor: KeyFn,
   maxAttempts: number = MAX_ATTEMPTS,
+  estActif: () => boolean = () => true,
 ): EmailRateLimiter => {
   const buckets = new Map<string, Bucket>();
   let insertsSinceSweep = 0;
@@ -76,6 +113,11 @@ const createEmailRateLimiter = (
   };
 
   const handler: RequestHandler = (req, res, next) => {
+    if (!estActif()) {
+      next();
+      return;
+    }
+
     const key = keyFor(req);
     const now = Date.now();
     const bucket = buckets.get(key);
@@ -109,24 +151,47 @@ const createEmailRateLimiter = (
 };
 
 /** Compteurs distincts : dix connexions ET dix inscriptions par adresse. */
-const loginLimiter = createEmailRateLimiter();
-const registerLimiter = createEmailRateLimiter();
+const loginLimiter = createRateLimiter(keyByEmail);
+const registerLimiter = createRateLimiter(keyByEmail);
+
+/** Et, par-dessus, un plafond par adresse IP contre la pulvérisation. */
+const loginIpLimiter = createRateLimiter(
+  keyByIp,
+  MAX_ATTEMPTS_PAR_IP,
+  () => trustedProxyHops() > 0,
+);
+
+/** Conservé sous son ancien nom : le moteur est le même, la clé est l'e-mail. */
+const createEmailRateLimiter = (maxAttempts: number = MAX_ATTEMPTS) =>
+  createRateLimiter(keyByEmail, maxAttempts);
 
 /** Remet tous les compteurs à zéro (tests). */
 const resetLoginLimiter = (): void => {
   loginLimiter.reset();
   registerLimiter.reset();
+  loginIpLimiter.reset();
 };
 
-export default { loginLimiter, registerLimiter, resetLoginLimiter };
+export default {
+  loginLimiter,
+  loginIpLimiter,
+  registerLimiter,
+  resetLoginLimiter,
+};
 export {
   MAX_ATTEMPTS,
+  MAX_ATTEMPTS_PAR_IP,
   MAX_TRACKED_KEYS,
   SWEEP_EVERY,
   WINDOW_MS,
   createEmailRateLimiter,
+  createRateLimiter,
+  keyByEmail,
+  keyByIp,
+  loginIpLimiter,
   loginLimiter,
   registerLimiter,
   resetLoginLimiter,
+  trustedProxyHops,
 };
 export type { EmailRateLimiter };

@@ -1,7 +1,9 @@
 import argon2 from "argon2";
 import type { RequestHandler, Response } from "express";
+import jwt from "jsonwebtoken";
 import authRepository from "./AuthentificationRepository";
-import jwtUtil, { COOKIE_NAME } from "./Jwt";
+import jwtUtil, { COOKIE_NAME, SESSION_DURATION_MS } from "./Jwt";
+import sessionRepository from "./SessionRepository";
 
 /**
  * Pose le cookie de session. Le jeton ne quitte jamais l'en-tête `Set-Cookie` :
@@ -189,9 +191,47 @@ const loginAdmin: RequestHandler = async (req, res, next) => {
   }
 };
 
-/** Ferme la session : le cookie est effacé avec les mêmes attributs. */
-const logout: RequestHandler = (_req, res) => {
+/**
+ * Ferme la session : le jeton est révoqué, puis le cookie effacé.
+ *
+ * L'ordre compte. Effacer le cookie d'abord et échouer ensuite laisserait un
+ * jeton vivant que le navigateur a oublié mais qu'un autre peut rejouer. On
+ * révoque donc d'abord, et une révocation impossible est une déconnexion
+ * ratée, pas une déconnexion silencieuse.
+ *
+ * Un jeton illisible, expiré, ou signé avant l'arrivée du `jti` : rien à
+ * révoquer, on efface le cookie et c'est tout.
+ */
+const logout: RequestHandler = async (req, res, next) => {
   const { maxAge: _maxAge, ...options } = jwtUtil.cookieOptions();
+  const token = req.cookies?.[COOKIE_NAME];
+
+  if (typeof token === "string" && token !== "") {
+    try {
+      const payload = jwtUtil.verifyToken(token);
+
+      if (payload.jti != null) {
+        // `exp` est en secondes ; sans lui, on retombe sur la durée nominale.
+        const expiresAt =
+          payload.exp != null
+            ? new Date(payload.exp * 1000)
+            : new Date(Date.now() + SESSION_DURATION_MS);
+
+        await sessionRepository.revoke(payload.jti, expiresAt);
+      }
+    } catch (err) {
+      // Jeton illisible ou expiré : il n'y a rien à révoquer.
+      if (
+        !(
+          err instanceof jwt.JsonWebTokenError ||
+          err instanceof jwt.TokenExpiredError
+        )
+      ) {
+        next(err);
+        return;
+      }
+    }
+  }
 
   res.clearCookie(COOKIE_NAME, options);
   res.sendStatus(204);

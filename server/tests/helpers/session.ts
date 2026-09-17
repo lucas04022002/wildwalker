@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import jwtUtil from "../../src/modules/Authentification/Jwt";
 
 type SessionUser = {
   id: number;
@@ -21,12 +21,15 @@ const adminUser: SessionUser = {
   firstname: "Alex",
 };
 
-/** Signe un jeton de session comme le fait le serveur au login. */
-const signSession = (user: SessionUser): string =>
-  jwt.sign(user, process.env.JWT_SECRET as string, {
-    algorithm: "HS256",
-    expiresIn: "7d",
-  });
+/**
+ * Signe un jeton de session en appelant le signataire du serveur.
+ *
+ * Il recopiait auparavant `jwt.sign` avec ses propres options. Les deux ont
+ * divergé le jour où le serveur a commencé à poser un `jti` : les jetons des
+ * tests n'en portaient pas, et les tests validaient donc un jeton qui
+ * n'existe plus en production. Passer par le vrai code supprime la question.
+ */
+const signSession = (user: SessionUser): string => jwtUtil.signToken(user);
 
 /** En-tête `Cookie` prêt à l'emploi pour supertest. */
 const sessionCookie = (user: SessionUser): string =>

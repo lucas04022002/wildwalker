@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import jwtUtil, { COOKIE_NAME } from "../modules/Authentification/Jwt";
+import sessionRepository from "../modules/Authentification/SessionRepository";
 
 /**
  * Lit le jeton de session.
@@ -25,7 +26,7 @@ const readToken = (req: Parameters<RequestHandler>[0]): string | null => {
   return null;
 };
 
-const requireAuth: RequestHandler = (req, res, next) => {
+const requireAuth: RequestHandler = async (req, res, next) => {
   const token = readToken(req);
 
   if (token == null) {
@@ -33,14 +34,37 @@ const requireAuth: RequestHandler = (req, res, next) => {
     return;
   }
 
+  let payload: ReturnType<typeof jwtUtil.verifyToken>;
+
   try {
-    const payload = jwtUtil.verifyToken(token);
-    req.user = { id: payload.id, email: payload.email, role: payload.role };
-    next();
+    payload = jwtUtil.verifyToken(token);
   } catch {
     // Aucun détail renvoyé ni journalisé : ni le jeton, ni la cause.
     res.status(401).json({ message: "Session expirée, reconnectez-vous." });
+    return;
   }
+
+  // La signature tient et la date n'est pas passée — reste à savoir si cette
+  // session a été fermée. Sans cette question, la déconnexion n'effaçait que
+  // le cookie du navigateur : le même jeton, rejoué, ouvrait toutes les portes
+  // pendant sept jours.
+  //
+  // Une panne de base ne doit pas laisser passer un jeton révoqué : la garde
+  // échoue en position fermée.
+  if (payload.jti != null) {
+    try {
+      if (await sessionRepository.isRevoked(payload.jti)) {
+        res.status(401).json({ message: "Session fermée, reconnectez-vous." });
+        return;
+      }
+    } catch {
+      res.status(503).json({ message: "Service indisponible." });
+      return;
+    }
+  }
+
+  req.user = { id: payload.id, email: payload.email, role: payload.role };
+  next();
 };
 
 /** Vérifie le rôle une fois l'authentification faite. */

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import jwt, { type SignOptions } from "jsonwebtoken";
 
 /**
@@ -18,6 +19,20 @@ type TokenPayload = {
   email: string;
   role: string;
   firstname: string;
+  /**
+   * Identifiant unique de CE jeton, tiré au hasard à la signature.
+   *
+   * Sans lui, un jeton n'est désignable par rien : on ne peut ni le révoquer,
+   * ni distinguer deux sessions du même compte. C'est ce qui permet à la
+   * déconnexion de ne fermer que la session en cours, et pas toutes les
+   * autres.
+   *
+   * Optionnel à la lecture : les jetons signés avant cette version n'en
+   * portent pas, et doivent rester valides jusqu'à leur expiration naturelle.
+   */
+  jti?: string;
+  /** Posé par jsonwebtoken. Sert à dater la ligne de révocation. */
+  exp?: number;
 };
 
 /**
@@ -39,9 +54,14 @@ const signToken = (payload: TokenPayload): string => {
   const options: SignOptions = {
     algorithm: "HS256",
     expiresIn: SESSION_DURATION_SECONDS,
+    jwtid: payload.jti ?? randomUUID(),
   };
 
-  return jwt.sign(payload, getSecret(), options);
+  // `jti` est posé par `jwtid` : le laisser aussi dans la charge utile le
+  // ferait écrire deux fois, et jsonwebtoken refuse la collision.
+  const { jti: _jti, exp: _exp, ...corps } = payload;
+
+  return jwt.sign(corps, getSecret(), options);
 };
 
 const verifyToken = (token: string): TokenPayload =>
