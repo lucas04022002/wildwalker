@@ -14,6 +14,10 @@ jest.mock("../src/modules/Authentification/SessionRepository", () => ({
   __esModule: true,
   default: {
     isRevoked: jest.fn(async () => false),
+    lireEtat: jest.fn(async () => ({
+      revoque: false,
+      motDePasseChangeLe: null,
+    })),
     revoke: jest.fn(async () => undefined),
     purgerExpirees: jest.fn(async () => undefined),
   },

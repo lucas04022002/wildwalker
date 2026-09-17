@@ -154,6 +154,15 @@ const createRateLimiter = (
 const loginLimiter = createRateLimiter(keyByEmail);
 const registerLimiter = createRateLimiter(keyByEmail);
 
+/**
+ * Demandes de réinitialisation.
+ *
+ * Trois par adresse et par quart d'heure : au-delà, ce n'est plus quelqu'un
+ * qui a oublié son mot de passe, c'est quelqu'un qui se sert du formulaire
+ * pour inonder une boîte de messages.
+ */
+const forgotLimiter = createRateLimiter(keyByEmail, 3);
+
 /** Et, par-dessus, un plafond par adresse IP contre la pulvérisation. */
 const loginIpLimiter = createRateLimiter(
   keyByIp,
@@ -170,9 +179,11 @@ const resetLoginLimiter = (): void => {
   loginLimiter.reset();
   registerLimiter.reset();
   loginIpLimiter.reset();
+  forgotLimiter.reset();
 };
 
 export default {
+  forgotLimiter,
   loginLimiter,
   loginIpLimiter,
   registerLimiter,
@@ -186,6 +197,7 @@ export {
   WINDOW_MS,
   createEmailRateLimiter,
   createRateLimiter,
+  forgotLimiter,
   keyByEmail,
   keyByIp,
   loginIpLimiter,

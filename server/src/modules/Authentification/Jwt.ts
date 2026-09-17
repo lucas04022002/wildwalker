@@ -33,6 +33,12 @@ type TokenPayload = {
   jti?: string;
   /** Posé par jsonwebtoken. Sert à dater la ligne de révocation. */
   exp?: number;
+  /**
+   * Date d'émission, posée par jsonwebtoken. Comparée à
+   * `users.password_changed_at` : un jeton plus ancien que le dernier
+   * changement de mot de passe est refusé.
+   */
+  iat?: number;
 };
 
 /**
@@ -59,7 +65,7 @@ const signToken = (payload: TokenPayload): string => {
 
   // `jti` est posé par `jwtid` : le laisser aussi dans la charge utile le
   // ferait écrire deux fois, et jsonwebtoken refuse la collision.
-  const { jti: _jti, exp: _exp, ...corps } = payload;
+  const { jti: _jti, exp: _exp, iat: _iat, ...corps } = payload;
 
   return jwt.sign(corps, getSecret(), options);
 };

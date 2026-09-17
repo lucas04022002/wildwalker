@@ -9,6 +9,10 @@ jest.mock("../src/modules/Authentification/SessionRepository", () => ({
   __esModule: true,
   default: {
     isRevoked: jest.fn(async () => false),
+    lireEtat: jest.fn(async () => ({
+      revoque: false,
+      motDePasseChangeLe: null,
+    })),
     revoke: jest.fn(async () => undefined),
     purgerExpirees: jest.fn(async () => undefined),
   },
@@ -34,7 +38,10 @@ const jtiDe = (cookie: string): string | undefined => {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (sessionRepository.isRevoked as jest.Mock).mockResolvedValue(false);
+  (sessionRepository.lireEtat as jest.Mock).mockResolvedValue({
+    revoque: false,
+    motDePasseChangeLe: null,
+  });
   (sessionRepository.revoke as jest.Mock).mockResolvedValue(undefined);
 });
 
@@ -56,11 +63,14 @@ describe("requireAuth", () => {
       .set("Cookie", sessionCookie(adminUser));
 
     expect(res.status).toBe(200);
-    expect(sessionRepository.isRevoked).toHaveBeenCalled();
+    expect(sessionRepository.lireEtat).toHaveBeenCalled();
   });
 
   test("401 sur un jeton révoqué, même si la signature est bonne", async () => {
-    (sessionRepository.isRevoked as jest.Mock).mockResolvedValue(true);
+    (sessionRepository.lireEtat as jest.Mock).mockResolvedValue({
+      revoque: true,
+      motDePasseChangeLe: null,
+    });
 
     const res = await request(app)
       .get(ROUTE)
@@ -69,8 +79,37 @@ describe("requireAuth", () => {
     expect(res.status).toBe(401);
   });
 
+  test("401 sur un jeton émis AVANT un changement de mot de passe", async () => {
+    // Le jeton vient d'être signé ; on date le changement d'une heure plus tard.
+    // C'est le cas qui justifie la réinitialisation : quelqu'un d'autre est
+    // connecté, et changer le mot de passe doit le mettre dehors.
+    (sessionRepository.lireEtat as jest.Mock).mockResolvedValue({
+      revoque: false,
+      motDePasseChangeLe: new Date(Date.now() + 3_600_000),
+    });
+
+    const res = await request(app)
+      .get(ROUTE)
+      .set("Cookie", sessionCookie(adminUser));
+
+    expect(res.status).toBe(401);
+  });
+
+  test("un jeton émis APRÈS le changement reste valide", async () => {
+    (sessionRepository.lireEtat as jest.Mock).mockResolvedValue({
+      revoque: false,
+      motDePasseChangeLe: new Date(Date.now() - 3_600_000),
+    });
+
+    const res = await request(app)
+      .get(ROUTE)
+      .set("Cookie", sessionCookie(adminUser));
+
+    expect(res.status).toBe(200);
+  });
+
   test("503 si la base est injoignable : la garde échoue en position fermée", async () => {
-    (sessionRepository.isRevoked as jest.Mock).mockRejectedValue(
+    (sessionRepository.lireEtat as jest.Mock).mockRejectedValue(
       new Error("base injoignable"),
     );
 
@@ -99,7 +138,6 @@ describe("requireAuth", () => {
       .set("Cookie", `${COOKIE_NAME}=${ancien}`);
 
     expect(res.status).toBe(200);
-    expect(sessionRepository.isRevoked).not.toHaveBeenCalled();
   });
 });
 
@@ -153,7 +191,10 @@ describe("déconnexion", () => {
     const cookie = sessionCookie(adminUser);
     await deconnecter(cookie);
 
-    (sessionRepository.isRevoked as jest.Mock).mockResolvedValue(true);
+    (sessionRepository.lireEtat as jest.Mock).mockResolvedValue({
+      revoque: true,
+      motDePasseChangeLe: null,
+    });
     const res = await request(app).get(ROUTE).set("Cookie", cookie);
 
     expect(res.status).toBe(401);

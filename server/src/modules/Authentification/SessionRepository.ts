@@ -53,5 +53,41 @@ const isRevoked = async (jti: string): Promise<boolean> => {
   return rows.length > 0;
 };
 
-export default { isRevoked, purgerExpirees, revoke };
-export { NETTOYAGE_TOUS_LES, isRevoked, purgerExpirees, revoke };
+/**
+ * Les deux raisons qu'a un jeton d'être mort, en une seule requête.
+ *
+ * Une session peut avoir été fermée (déconnexion) ou périmée par un
+ * changement de mot de passe. Les deux faits vivent dans des tables
+ * différentes ; les demander séparément coûterait deux allers-retours par
+ * requête authentifiée. Deux sous-requêtes, un seul.
+ *
+ * `jti` peut être absent : les jetons signés avant son arrivée n'en portent
+ * pas, et restent valides jusqu'à leur expiration naturelle.
+ */
+type EtatSession = { revoque: boolean; motDePasseChangeLe: Date | null };
+
+const lireEtat = async (
+  jti: string | null,
+  userId: number,
+): Promise<EtatSession> => {
+  const [rows] = await databaseLeLocal.query<Rows>(
+    `SELECT
+       (SELECT 1 FROM revoked_session WHERE jti = ? LIMIT 1) AS revoque,
+       (SELECT password_changed_at FROM users WHERE id = ? LIMIT 1) AS change_le`,
+    [jti ?? "", userId],
+  );
+
+  const ligne = rows[0] as
+    | { revoque: number | null; change_le: Date | string | null }
+    | undefined;
+
+  return {
+    revoque: ligne?.revoque != null,
+    motDePasseChangeLe:
+      ligne?.change_le != null ? new Date(ligne.change_le) : null,
+  };
+};
+
+export default { isRevoked, lireEtat, purgerExpirees, revoke };
+export { NETTOYAGE_TOUS_LES, isRevoked, lireEtat, purgerExpirees, revoke };
+export type { EtatSession };

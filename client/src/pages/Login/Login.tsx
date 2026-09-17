@@ -184,6 +184,10 @@ export default function Login() {
             </button>
 
             <p className="auth-switch">
+              <Link to="/mot-de-passe-oublie">Mot de passe oublié ?</Link>
+            </p>
+
+            <p className="auth-switch">
               Pas encore de compte ? <Link to="/sign-in">Créer un compte</Link>
             </p>
           </div>

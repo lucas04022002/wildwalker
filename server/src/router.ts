@@ -4,12 +4,18 @@ import authMiddleware from "./Middlewares/authMiddleware";
 import cartMiddleware from "./Middlewares/cartMiddleware";
 import eventMiddleware from "./Middlewares/eventMiddleware";
 import {
+  forgotLimiter,
   loginIpLimiter,
   loginLimiter,
   registerLimiter,
 } from "./Middlewares/rateLimit";
-import { validateRegister } from "./Middlewares/registerMiddleware";
+import {
+  validateForgotPassword,
+  validateRegister,
+  validateResetPassword,
+} from "./Middlewares/registerMiddleware";
 import authActions from "./modules/Authentification/AuthentificationAction";
+import passwordResetActions from "./modules/Authentification/PasswordResetAction";
 import paymentActions from "./modules/Payment/PaymentAction";
 import activityActions from "./modules/activity/activityActions";
 import bookingActions from "./modules/bookingActions/bookingActions";
@@ -56,6 +62,24 @@ router.post(
 );
 router.post("/api/auth/logout", authActions.logout);
 router.get("/api/auth/me", authMiddleware.requireAuth, authActions.me);
+
+// Réinitialisation : publique par nécessité — quelqu'un qui a perdu son mot de
+// passe ne peut, par définition, pas s'authentifier. Les deux routes portent
+// donc leur propre plafond, et répondent la même chose quelle que soit
+// l'adresse fournie.
+router.post(
+  "/api/auth/forgot-password",
+  loginIpLimiter,
+  forgotLimiter,
+  validateForgotPassword,
+  passwordResetActions.demander,
+);
+router.post(
+  "/api/auth/reset-password",
+  loginIpLimiter,
+  validateResetPassword,
+  passwordResetActions.reinitialiser,
+);
 
 /* ************************************************************************* */
 // Time slots (public)

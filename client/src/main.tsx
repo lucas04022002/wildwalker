@@ -12,6 +12,8 @@ import Events from "./pages/Events/Events";
 import Home from "./pages/Home/Home";
 import InvoicePage from "./pages/InvoicePage/InvoicePage";
 import LogIn from "./pages/Login/Login";
+import ForgotPassword from "./pages/PasswordReset/ForgotPassword";
+import ResetPassword from "./pages/PasswordReset/ResetPassword";
 import Payment from "./pages/Payment/Payment";
 import Spaces from "./pages/Spaces/Spaces";
 import WorkshopPage from "./pages/WorkshopPage/WorkshopPage";
@@ -97,6 +99,16 @@ export const routes: RouteObject[] = [
       {
         path: "/sign-in",
         element: <SignIn />,
+      },
+      // Publiques par nécessité : quelqu'un qui a perdu son mot de passe ne
+      // peut pas s'authentifier pour le changer.
+      {
+        path: "/mot-de-passe-oublie",
+        element: <ForgotPassword />,
+      },
+      {
+        path: "/reinitialiser-mot-de-passe",
+        element: <ResetPassword />,
       },
     ],
   },

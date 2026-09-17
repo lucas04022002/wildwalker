@@ -71,35 +71,92 @@ const registerSchema = Joi.object({
   adress: Joi.string().trim().max(255).allow("", null).label("adresse"),
 });
 
-const validateRegister: RequestHandler = (req, res, next) => {
-  const { error, value } = registerSchema.validate(req.body, {
-    abortEarly: false,
-    // `stripUnknown` retire tout champ non listé : `role` envoyé dans le corps
-    // n'atteint jamais l'action. Le SQL l'écrit déjà en dur, mais la garde ne
-    // doit pas reposer sur une seule ligne.
-    stripUnknown: true,
-    messages: {
-      "any.required": "Le {#label} est obligatoire.",
-      "string.base": "Le {#label} doit être du texte.",
-      "string.empty": "Le {#label} ne peut pas être vide.",
-      "string.min": "Le {#label} doit contenir au moins {#limit} caractères.",
-      "string.max": "Le {#label} ne peut pas dépasser {#limit} caractères.",
-      "string.email": "L'adresse e-mail n'est pas valide.",
-      "string.pattern.base":
-        "Le champ {#label} contient des caractères refusés.",
-    },
-  });
-
-  if (error) {
-    res.status(400).json({
-      errors: error.details.map((detail) => detail.message),
+/** Le même validateur pour les trois schémas : un seul endroit à relire. */
+const valider =
+  (schema: Joi.ObjectSchema): RequestHandler =>
+  (req, res, next) => {
+    const { error, value } = schema.validate(req.body, {
+      abortEarly: false,
+      // `stripUnknown` retire tout champ non listé : `role` envoyé dans le corps
+      // n'atteint jamais l'action. Le SQL l'écrit déjà en dur, mais la garde ne
+      // doit pas reposer sur une seule ligne.
+      stripUnknown: true,
+      messages: {
+        "any.required": "Le {#label} est obligatoire.",
+        "string.base": "Le {#label} doit être du texte.",
+        "string.empty": "Le {#label} ne peut pas être vide.",
+        "string.min": "Le {#label} doit contenir au moins {#limit} caractères.",
+        "string.max": "Le {#label} ne peut pas dépasser {#limit} caractères.",
+        "string.email": "L'adresse e-mail n'est pas valide.",
+        "string.pattern.base":
+          "Le champ {#label} contient des caractères refusés.",
+      },
     });
-    return;
-  }
 
-  req.body = value;
-  next();
+    if (error) {
+      res.status(400).json({
+        errors: error.details.map((detail) => detail.message),
+      });
+      return;
+    }
+
+    req.body = value;
+    next();
+  };
+
+/**
+ * Demande de réinitialisation : une adresse, rien d'autre.
+ *
+ * Le schéma refuse les champs inconnus (`stripUnknown`), notamment un
+ * `users_id` ou un `role` qu'on tenterait de glisser.
+ */
+const forgotSchema = Joi.object({
+  email: Joi.string()
+    .trim()
+    .lowercase()
+    .email()
+    .max(150)
+    .required()
+    .label("adresse e-mail"),
+});
+
+/**
+ * Choix du nouveau mot de passe.
+ *
+ * Le jeton fait 64 caractères hexadécimaux (32 octets). Le vérifier ici évite
+ * d'interroger la base pour une chaîne qui ne peut de toute façon pas en être
+ * un. Le mot de passe suit exactement les mêmes règles qu'à l'inscription :
+ * une règle qui change selon la porte d'entrée n'est pas une règle.
+ */
+const resetSchema = Joi.object({
+  jeton: Joi.string()
+    .trim()
+    .pattern(/^[0-9a-f]{64}$/)
+    .required()
+    .label("lien"),
+  password: Joi.string()
+    .min(PASSWORD_MIN)
+    .max(PASSWORD_MAX)
+    .required()
+    .label("mot de passe"),
+});
+
+const validateRegister = valider(registerSchema);
+const validateForgotPassword = valider(forgotSchema);
+const validateResetPassword = valider(resetSchema);
+
+export default {
+  validateForgotPassword,
+  validateRegister,
+  validateResetPassword,
 };
-
-export default { validateRegister };
-export { PASSWORD_MAX, PASSWORD_MIN, registerSchema, validateRegister };
+export {
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+  forgotSchema,
+  registerSchema,
+  resetSchema,
+  validateForgotPassword,
+  validateRegister,
+  validateResetPassword,
+};

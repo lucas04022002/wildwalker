@@ -75,5 +75,23 @@ const create = async (user: {
   return findById(result.insertId);
 };
 
-export default { findByEmail, findByPhone, findById, create };
+/**
+ * Change le mot de passe et date le changement.
+ *
+ * `password_changed_at` n'est pas décoratif : `requireAuth` refuse tout jeton
+ * émis avant cette date. Sans elle, une réinitialisation laisserait vivre la
+ * session de celui dont on essaie justement de se débarrasser.
+ */
+const updatePassword = async (
+  id: number,
+  passwordHash: string,
+): Promise<void> => {
+  await databaseLeLocal.query(
+    "UPDATE users SET password = ?, password_changed_at = NOW() WHERE id = ?",
+    [passwordHash, id],
+  );
+};
+
+export default { findByEmail, findByPhone, findById, create, updatePassword };
+export { updatePassword };
 export type { UserRow, SafeUser };

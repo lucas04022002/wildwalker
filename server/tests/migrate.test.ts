@@ -198,6 +198,7 @@ describe("runMigrations", () => {
       "0001_init.sql",
       "0002_invoice_counter.sql",
       "0003_revoked_session.sql",
+      "0004_password_reset.sql",
     ]);
     for (const sql of fake.allQueries()) {
       expect(sql).not.toMatch(/drop\s+database/i);

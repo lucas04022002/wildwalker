@@ -44,23 +44,42 @@ const requireAuth: RequestHandler = async (req, res, next) => {
     return;
   }
 
-  // La signature tient et la date n'est pas passée — reste à savoir si cette
-  // session a été fermée. Sans cette question, la déconnexion n'effaçait que
-  // le cookie du navigateur : le même jeton, rejoué, ouvrait toutes les portes
-  // pendant sept jours.
+  // La signature tient et la date n'est pas passée. Restent deux façons pour
+  // une session d'être morte quand même : avoir été fermée (déconnexion), ou
+  // avoir été émise avant un changement de mot de passe. Les deux sont lues
+  // d'une seule requête.
   //
-  // Une panne de base ne doit pas laisser passer un jeton révoqué : la garde
+  // Une panne de base ne doit pas laisser passer un jeton mort : la garde
   // échoue en position fermée.
-  if (payload.jti != null) {
-    try {
-      if (await sessionRepository.isRevoked(payload.jti)) {
-        res.status(401).json({ message: "Session fermée, reconnectez-vous." });
-        return;
-      }
-    } catch {
-      res.status(503).json({ message: "Service indisponible." });
+  try {
+    const etat = await sessionRepository.lireEtat(
+      payload.jti ?? null,
+      payload.id,
+    );
+
+    if (etat.revoque) {
+      res.status(401).json({ message: "Session fermée, reconnectez-vous." });
       return;
     }
+
+    // `iat` est en secondes. Une session ouverte avant le changement de mot de
+    // passe ne survit pas au changement : c'est tout l'intérêt d'en changer
+    // quand quelqu'un d'autre est entré.
+    if (etat.motDePasseChangeLe != null && payload.iat != null) {
+      const emisLe = payload.iat * 1000;
+
+      // Une seconde de marge : `iat` est arrondi à la seconde, et se
+      // reconnecter dans la foulée d'un changement ne doit pas échouer.
+      if (emisLe + 1000 < etat.motDePasseChangeLe.getTime()) {
+        res.status(401).json({
+          message: "Mot de passe modifié, reconnectez-vous.",
+        });
+        return;
+      }
+    }
+  } catch {
+    res.status(503).json({ message: "Service indisponible." });
+    return;
   }
 
   req.user = { id: payload.id, email: payload.email, role: payload.role };
