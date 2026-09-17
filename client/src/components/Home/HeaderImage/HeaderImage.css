@@ -87,3 +87,47 @@
     }
   }
 }
+
+/*
+ * Le hero etait dessine pour un grand ecran et n'en sortait jamais :
+ *
+ * - le titre restait a 64 px sur un telephone, ou il occupait 368 px de haut,
+ *   soit pres de la moitie de l'ecran avant le premier mot de texte ;
+ * - le paragraphe porte deux <br> en dur, cales sur la longueur de ligne du
+ *   desktop ; sur 375 px ils coupaient au milieu des phrases ;
+ * - les deux boutons restaient cote a cote en `nowrap`, a 128 px chacun, et
+ *   leur libelle repassait a la ligne a l'interieur du bouton.
+ *
+ * `min-height: 48px` egalise aussi les deux boutons : le secondaire porte
+ * `border: var(--radius-sm)` — un jeton de rayon utilise comme epaisseur de
+ * bordure — et se retrouvait 4 px plus haut que le primaire. 48 px passe en
+ * meme temps le seuil tactile de 44 px.
+ */
+@media (max-width: 768px) {
+  .hero-global-div .hero-content-div {
+    padding: 0 24px;
+  }
+
+  .hero-global-div .hero-content-div .hero-title {
+    font-size: clamp(2.25rem, 10vw, 4rem);
+  }
+
+  .hero-global-div .hero-content-div .hero-description br {
+    display: none;
+  }
+
+  .hero-global-div .hero-content-div .hero-buttons-div {
+    flex-wrap: wrap;
+  }
+
+  .hero-global-div .hero-content-div .hero-buttons-div .hero-button {
+    flex: 1 1 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 14px 20px;
+  }
+}

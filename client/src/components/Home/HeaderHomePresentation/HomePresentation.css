@@ -1,9 +1,19 @@
+/*
+ * Le bandeau tenait sur une seule ligne, sans retour possible : trois blocs de
+ * ~190 px chacun dans un ecran de 375 px, moins 160 px de padding fixe. Il
+ * sortait donc de l'ecran de 409 px a lui seul.
+ *
+ * `flex-wrap` le laisse passer a la ligne, et le padding suit la largeur au
+ * lieu d'etre fige a 80 px.
+ */
 .stats-global-div {
   background-color: var(--color-forest);
   display: flex;
-  justify-content: space-around;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  padding: 10px 80px;
+  padding: 14px clamp(16px, 5vw, 80px);
+  gap: 10px clamp(24px, 6vw, 56px);
 
   .stats-item-div {
     display: flex;

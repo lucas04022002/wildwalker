@@ -1,8 +1,18 @@
+/*
+ * Deux colonnes cote a cote qui ne s'empilaient jamais : une image figee a
+ * 420 px avec `flex-shrink: 0`, un texte a 600 px, et 160 px de padding. La
+ * section reclamait 846 px quelle que soit la taille de l'ecran.
+ *
+ * Sous 1024 px elle passe en colonne et l'image prend la largeur disponible en
+ * gardant son cadrage (`aspect-ratio` reprend le rapport 420x520 d'origine).
+ * Au-dessus, rien ne change.
+ */
 .mission-global-section {
   display: flex;
   align-items: center;
-  gap: var(--gap-2xl);
-  padding: 80px;
+  flex-wrap: wrap;
+  gap: clamp(28px, 5vw, 64px);
+  padding: clamp(32px, 7vw, 80px);
   background-color: var(--color-bg-1);
 
   .mission-image-div {
@@ -105,5 +115,40 @@
         flex-shrink: 0;
       }
     }
+  }
+}
+
+/*
+ * Les regles ci-dessous doivent porter les trois niveaux de selecteur : le CSS
+ * imbrique plus haut produit `.mission-global-section .mission-image-div
+ * .mission-image` (specificite 0,3,0). Une regle plus courte est ignoree en
+ * silence — l'image restait a 420 px malgre la media query.
+ */
+@media (max-width: 1024px) {
+  .mission-global-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mission-global-section .mission-image-div {
+    flex-shrink: 1;
+    width: 100%;
+  }
+
+  .mission-global-section .mission-image-div .mission-image {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 42 / 52;
+    max-height: 520px;
+  }
+
+  .mission-global-section .mission-our-mission-div {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .mission-global-section .mission-our-mission-div .mission-features-list-div {
+    grid-template-columns: 1fr;
   }
 }
