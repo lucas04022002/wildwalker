@@ -88,9 +88,12 @@ const valider =
         "string.min": "Le {#label} doit contenir au moins {#limit} caractères.",
         "string.max": "Le {#label} ne peut pas dépasser {#limit} caractères.",
         "string.email": "L'adresse e-mail n'est pas valide.",
-        "string.pattern.base":
-          "Le champ {#label} contient des caractères refusés.",
+        "string.pattern.base": "Le {#label} contient des caractères refusés.",
       },
+      // Joi encadre le libellé de guillemets par défaut : « Le "mot de passe"
+      // doit contenir… ». Les libellés étant déjà en français et en clair, les
+      // guillemets ne font que gêner la lecture.
+      errors: { wrap: { label: false } },
     });
 
     if (error) {
